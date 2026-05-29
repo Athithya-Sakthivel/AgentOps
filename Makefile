@@ -25,7 +25,7 @@ delete-temp-s3:
 	fi
 
 tree:
-	tree -a -I '.git|.venv|archive|__pycache__|.venv_deploy|.venv_elt|.venv_train|.ruff_cache'
+	tree -a -I '.venv|.repos|.ruff_cache|archive|.git'
 
 push:
 	git add .

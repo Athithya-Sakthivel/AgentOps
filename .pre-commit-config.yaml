@@ -5,7 +5,13 @@ repos:
       - id: ruff
         args: [--fix]
       - id: ruff-format
+
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.30.0
     hooks:
       - id: gitleaks
+
+  - repo: https://github.com/DetachHead/basedpyright-pre-commit-mirror
+    rev: 1.39.6
+    hooks:
+      - id: basedpyright
