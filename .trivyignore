@@ -1,1 +1,7 @@
-# checkov:skip=CKV_AWS_382: outbound HTTPS required for AWS APIs and Cloudflare tunnel egress
+# AWS Security Group egress to 0.0.0.0/0 is intentionally restricted to HTTPS (443 only)
+# Required for:
+# - AWS APIs (S3, STS, Bedrock)
+# - Cloudflare Tunnel outbound connectivity
+# - No NAT Gateway architecture (ADR decision)
+
+AWS-0104
