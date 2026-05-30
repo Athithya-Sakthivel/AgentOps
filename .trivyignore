@@ -1,0 +1,1 @@
+# checkov:skip=CKV_AWS_382: outbound HTTPS required for AWS APIs and Cloudflare tunnel egress
