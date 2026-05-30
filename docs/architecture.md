@@ -1,75 +1,80 @@
-## AgentOps — Executive Summary
+# AgentOps — Executive Summary
 
-**An AI customer support agent for an e-commerce company (Kestral). Real-time chat via WebSocket with streaming LLM responses. Multi-step agent reasoning with LangGraph. MCP-standardized tool integration. DSPy-optimized prompts. Zero Kubernetes. $23/month infrastructure.**
+**AI customer support agent for Kestral (fictional e-commerce). Real-time WebSocket chat. LangGraph agent with DSPy-optimized classification. 9 MCP tools. Multi-turn memory. $23/month infrastructure.**
 
 ---
 
-### Architecture
+## Architecture
 
 ```
-Cloudflare (Tunnel, WAF, DDoS, DNS)
+Cloudflare (Tunnel, WAF, DDoS, DNS, Rate Limiting)
     │
     ▼
-2 × t4g.small Managed Instances (multi-AZ)
+2 × t4g.small ECS Managed Instances (multi‑AZ, bridge networking)
     │
     ├── cloudflared (systemd, not containerized)
-    ├── agent-service (ECS, bridge) — LangGraph + DSPy + policy search
-    └── mcp-server (ECS, bridge) — 9 MCP tools → PostgreSQL
+    ├── agent‑service (ECS) — LangGraph + DSPy + inline policy search
+    └── mcp‑server (ECS) — 9 MCP tools → PostgreSQL
     │
-    ├── RDS PostgreSQL (10 tables, checkpoints, seed data)
-    ├── DynamoDB (rate limiting, TTL)
-    ├── S3 (policy embeddings, 2.5 MB JSON)
-    └── Bedrock (Claude 3 Sonnet + Titan Embeddings)
+    ├── RDS PostgreSQL — business data, checkpoints, seed data
+    ├── S3 — policy embeddings (1.3 MB JSON)
+    └── Bedrock — Llama 3 8B (LLM) + Titan Embeddings v2
 ```
 
 ---
 
-### 4 Key Architectural Decisions
+## Key Decisions
 
-| ADR | Decision | Avoids | Saves |
-|-----|----------|--------|-------|
-| **001** | ECS Managed Instances over EKS/Fargate | K8s overhead, per-task pricing | ~$122/mo |
-| **002** | Cloudflare Tunnel over ALB/NAT/WAF | ALB hourly, NAT hourly, WAF ACL | ~$62/mo |
-| **003** | Structured logs + correlation IDs over X-Ray/OTEL | Tracing infra, collector overhead | ~$5-15/mo |
-| **004** | S3 + brute-force cosine similarity over vector DB | Qdrant, OpenSearch, pgvector | ~$190/mo |
+| ADR | Decision | Avoids | Saves/mo |
+|-----|----------|--------|----------|
+| 001 | ECS Managed Instances over EKS/Fargate | K8s overhead, per‑task pricing | ~$122 |
+| 002 | Cloudflare Tunnel over ALB/NAT/WAF | ALB, NAT Gateway, WAF ACL | ~$62 |
+| 003 | Structured logs + run_id over X‑Ray/OTEL | Tracing infra, collector overhead | ~$5‑15 |
+| 004 | S3 + brute‑force over vector database | Qdrant, OpenSearch, pgvector | ~$190 |
 
 ---
 
-### Cost Profile
+## Cost
 
-| Category | Unoptimized Default | Optimized |
-|----------|---------------------|-----------|
+| Category | Over‑provisioned | Optimized |
+|----------|------------------|-----------|
 | Compute | $142 (Fargate) | $20 (2 × t4g.small) |
-| Networking | $62 (ALB+NAT+WAF) | $0 (Cloudflare Tunnel) |
+| Networking | $62 (ALB+NAT+WAF) | $0 (Cloudflare) |
 | Vector Search | $190 (OpenSearch+Qdrant) | ~$0.03 (S3+Bedrock) |
-| Observability | $15-20 (verbose+X-Ray) | ~$3 (structured logs) |
+| Observability | $15‑20 (verbose+X‑Ray) | ~$3 (structured logs) |
 | **Total** | **~$414/month** | **~$23/month** |
 
-**91% cost reduction. Every optimization reduces or maintains complexity.**
+**91% reduction. No complexity added.**
 
 ---
 
-### Workloads
+## Agent Capabilities
 
-| Type | What | Where |
-|------|------|-------|
-| Real-time chat | WebSocket streaming, LangGraph agent | agent-service (ECS, always warm) |
-| Tool execution | 9 MCP tools (lookup, refund, ticket, etc.) | mcp-server (ECS, always warm) |
-| Policy search | Query embedding → cosine similarity → top-K | agent-service (in-process, S3-cached) |
-| Rate limiting | Atomic counters, per-connection | DynamoDB (on-demand) |
-| Auth | WebSocket $connect validation | Lambda Authorizer |
-| Checkpoints | LangGraph state persistence | PostgreSQL |
+| Capability | How |
+|------------|-----|
+| Intent classification | DSPy‑compiled triage (Bedrock Llama 3 8B) |
+| Customer lookup | MCP tool → PostgreSQL |
+| Order history | MCP tool → PostgreSQL (last 5) |
+| Policy Q&A | S3 + Bedrock Titan + NumPy (inline RAG, <5ms) |
+| Refund eligibility | MCP tool → PostgreSQL (return window, billing checks) |
+| Wallet credit | MCP tool → PostgreSQL (max Rs.500) |
+| Return pickup | MCP tool → PostgreSQL (eligibility guard) |
+| Ticket creation | MCP tool → PostgreSQL (with team routing) |
+| Escalation | Automatic priority + team assignment |
+| Multi‑turn memory | PostgreSQL checkpoints via LangGraph |
+| Hallucination prevention | Order ID validation, tool‑result grounding |
 
 ---
 
-### What's NOT in the System
+## What's Not Needed
 
-| Not Present | Why |
-|-------------|-----|
-| Kubernetes (EKS) | $73 control plane, operational overhead for 2 services |
-| Vector database | 400 chunks → brute-force <5ms, no ANN needed |
-| NAT Gateway | Public subnet + IGW for outbound (free) |
-| Application Load Balancer | Cloudflare Tunnel handles all ingress |
-| X-Ray / OTEL Collector | Correlation IDs + structured logs sufficient at 2-service scale |
-| SNS / SQS / Step Functions | No async workloads justify them |
-| Lambda (beyond authorizer) | No long-running background tasks |
+| Removed | Why |
+|---------|-----|
+| EKS | $73 control plane, operational overhead for 2 services |
+| Vector database | 59 chunks → brute‑force <5ms |
+| NAT Gateway | Cloudflare Tunnel + IGW for outbound |
+| ALB | Cloudflare Tunnel handles ingress |
+| X‑Ray / OTEL | run_id correlation sufficient at 2‑service scale |
+| SNS / SQS / Step Functions | No async workloads |
+| DynamoDB | Rate limiting at edge (Cloudflare), state in PostgreSQL |
+| LangChain MCP adapters | Replaced by FastMCP Client SDK |

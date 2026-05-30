@@ -107,6 +107,7 @@ for ((i=0; i<30; i++)); do
 done
 cd - >/dev/null
 
+
 # ------------------------------------------------------------------ Test 1
 echo ""
 echo "=============================================================================="
@@ -114,18 +115,46 @@ echo "  TEST 1  - Multi-Turn Conversation (RAG + Context Memory)"
 echo "=============================================================================="
 echo "  SESSION: test-session-multi"
 
-# Open a persistent WebSocket connection and send multiple messages
-WS_MULTI=$(websocat -n3 "ws://127.0.0.1:${AGENT_PORT}/ws/chat/test-session-multi" <<'EOF'
-{"query":"Hi, I'm Priya Sharma. I need help with my recent order.","user_id":"a1b2c3d4-e5f6-4a7b-8c9d-000000000001"}
-{"query":"What's your return policy for damaged phones?"}
-{"query":"Great, can you check if my Samsung phone order is eligible for return?"}
-EOF
-2>/dev/null || echo '{"error":"websocat failed"}')
+# Use Python to send 3 messages on a single persistent WebSocket connection
+WS_MULTI=$(python3 -c "
+import asyncio
+import json
+import websockets
 
-echo "  RAW MULTI-TURN RESPONSES:"
-echo "${WS_MULTI}" | head -60
+async def multi_turn():
+    uri = 'ws://127.0.0.1:${AGENT_PORT}/ws/chat/test-session-multi'
+    responses = []
+    
+    async with websockets.connect(uri) as ws:
+        msg1 = json.dumps({
+            'query': \"Hi, I'm Priya Sharma. I need help with my recent order.\",
+            'user_id': 'a1b2c3d4-e5f6-4a7b-8c9d-000000000001'
+        })
+        await ws.send(msg1)
+        resp1 = await ws.recv()
+        responses.append(resp1)
+        
+        msg2 = json.dumps({
+            'query': \"What's your return policy for damaged phones?\"
+        })
+        await ws.send(msg2)
+        resp2 = await ws.recv()
+        responses.append(resp2)
+        
+        msg3 = json.dumps({
+            'query': 'Great, can you check if my Samsung phone order is eligible for return?'
+        })
+        await ws.send(msg3)
+        resp3 = await ws.recv()
+        responses.append(resp3)
+    
+    for r in responses:
+        print(r)
 
-# Extract individual responses (websocat -n3 outputs 3 JSON lines)
+asyncio.run(multi_turn())
+" 2>/dev/null || echo '{"error":"websocket multi-turn failed"}')
+
+# Extract individual responses
 TURN1=$(echo "${WS_MULTI}" | sed -n '1p')
 TURN2=$(echo "${WS_MULTI}" | sed -n '2p')
 TURN3=$(echo "${WS_MULTI}" | sed -n '3p')
@@ -148,21 +177,19 @@ echo "  SENT: Great, can you check if my Samsung phone order is eligible for ret
 echo "  RESPONSE:"
 echo "${TURN3}" | python3 -m json.tool --no-ensure-ascii 2>/dev/null || echo "${TURN3}"
 
-# Validate Turn 1: agent should acknowledge the customer
+# Validations
 if echo "${TURN1}" | grep -qiE "Priya|order|help"; then
   pass "Turn 1 - Agent acknowledged customer introduction"
 else
   fail "Turn 1 - Agent did not acknowledge the customer"
 fi
 
-# Validate Turn 2: policy response (turn 2 has no user_id — tests memory)
 if echo "${TURN2}" | grep -qiE "return|policy|damage|7 days"; then
   pass "Turn 2 - Agent answered policy question (no user_id provided)"
 else
   fail "Turn 2 - Agent did not answer policy question"
 fi
 
-# Validate Turn 3: agent should use remembered context (Priya's orders)
 if echo "${TURN3}" | grep -qiE "Samsung|eligible|return_window|refund|order"; then
   pass "Turn 3 - Agent used remembered context to check eligibility"
 else

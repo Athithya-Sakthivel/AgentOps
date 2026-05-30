@@ -2,7 +2,6 @@
 LangGraph node implementations - production ready.
 
 All nodes receive Runtime[Context] and use structured logging with run_id.
-No OpenTelemetry. No Groq rate limits - uses Bedrock.
 
 Includes:
   - guardrail_classifier   (DSPy triage)
