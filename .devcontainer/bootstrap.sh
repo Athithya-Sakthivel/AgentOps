@@ -18,7 +18,6 @@ curl -fsSL https://get.opentofu.org/install-opentofu.sh | sh -s -- --install-met
 
 # Python tooling pinned to current stable releases
 python3 -m pip install --break-system-packages -q \
-  uv==0.11.17 \
   pytest==9.0.3 \
   pre-commit==4.2.0
 
