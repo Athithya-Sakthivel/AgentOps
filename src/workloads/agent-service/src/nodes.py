@@ -83,7 +83,6 @@ def _unwrap_nested_json(text: str) -> str:
     if not isinstance(text, str):
         return str(text)
     stripped = text.strip()
-    # Find the outermost JSON object
     start = stripped.find("{")
     end = stripped.rfind("}")
     if start >= 0 and end > start and '"action"' in stripped:
@@ -96,6 +95,25 @@ def _unwrap_nested_json(text: str) -> str:
     return text
 
 
+def _resolve_order_id(orders: list[dict], query: str) -> str | None:
+    """Return the ID of the order most likely mentioned in the query."""
+    if not orders:
+        return None
+    query_lower = query.lower()
+    # Check for tracking number
+    for o in orders:
+        tracking = (o.get("tracking_number") or "").lower()
+        if tracking and tracking in query_lower:
+            return o["id"]
+    # Check for product name
+    for o in orders:
+        product_name = (o.get("product_name") or "").lower()
+        if product_name and any(word in query_lower for word in product_name.split()):
+            return o["id"]
+    # Fallback to most recent
+    return orders[0]["id"] if orders else None
+
+
 # ---------------------------------------------------------------------------
 # deterministic action mapping (action_dispatcher)
 # ---------------------------------------------------------------------------
@@ -104,7 +122,6 @@ def _unwrap_nested_json(text: str) -> str:
 def _next_business_day() -> str:
     """Return the next business day in ISO format."""
     today = datetime.now()
-    # Monday=0, Sunday=6; skip to Monday if Saturday/Sunday
     if today.weekday() == 5:  # Saturday
         today = today + timedelta(days=2)
     elif today.weekday() == 6:  # Sunday
@@ -120,10 +137,18 @@ INTENT_TO_ACTION = {
         "args_template": {"amount": 100, "reason": "delivery delay compensation"},
         "max_amount": 500,
     },
-    "delayed_delivery": {  # <-- ADD
+    "delayed_delivery": {
         "tool": "issue_wallet_credit",
         "args_template": {"amount": 100, "reason": "delivery delay compensation"},
         "max_amount": 500,
+    },
+    "damaged_product": {
+        "tool": "schedule_return_pickup",
+        "args_template": {"pickup_date": _next_business_day},
+    },
+    "defective_product": {
+        "tool": "schedule_return_pickup",
+        "args_template": {"pickup_date": _next_business_day},
     },
     "return_request": {
         "tool": "check_refund_eligibility",
@@ -133,7 +158,7 @@ INTENT_TO_ACTION = {
         "tool": "check_refund_eligibility",
         "pre_check": True,
     },
-    "refund_query": {  # <-- ADD
+    "refund_query": {
         "tool": "check_refund_eligibility",
         "pre_check": True,
     },
@@ -141,9 +166,9 @@ INTENT_TO_ACTION = {
         "tool": "check_refund_eligibility",
         "pre_check": True,
     },
-    "damaged_product": {
-        "tool": "schedule_return_pickup",
-        "args_template": {"pickup_date": _next_business_day},
+    "wrong_item_delivered": {
+        "tool": "check_refund_eligibility",
+        "pre_check": True,
     },
 }
 
@@ -249,7 +274,7 @@ async def context_gatherer(
 
 
 # ---------------------------------------------------------------------------
-# 3. ACTION DISPATCHER  (new - deterministic tool-first)
+# 3. ACTION DISPATCHER  (deterministic tool-first)
 # ---------------------------------------------------------------------------
 async def action_dispatcher(
     state: AgentState,
@@ -268,7 +293,6 @@ async def action_dispatcher(
 
     log_event("INFO", "Node started", node="action_dispatcher", run_id=run_id, intent=intent)
 
-    # Only act if auto_resolvable and a mapping exists
     if not classification.get("auto_resolvable", False):
         log_event("INFO", "Not auto resolvable, deferring to LLM", run_id=run_id)
         return {"action_taken": False}
@@ -281,22 +305,24 @@ async def action_dispatcher(
     tool_name = mapping["tool"]
     args = dict(mapping.get("args_template", {}))
 
-    # Enrich args with state data if possible
+    # Enrich args with state data
     user_id = state.get("user_id") or customer.get("id")
     if user_id:
         args["user_id"] = user_id
 
-    # If we have recent orders, use the latest one for order-related tools
     orders = customer_ctx.get("orders") or []
-    if orders and "order_id" not in args:
-        latest_order = orders[0]
-        if latest_order and "id" in latest_order:
-            args["order_id"] = latest_order["id"]
 
-    # For pre-check tools (refund eligibility), we need order_id
-    if mapping.get("pre_check") and "order_id" not in args:
-        log_event("WARN", "No order_id for pre-check, skipping", run_id=run_id, tool=tool_name)
-        return {"action_taken": False}
+    # For order-related tools, resolve the best order_id if not already provided
+    if mapping.get("pre_check") or tool_name == "schedule_return_pickup":
+        if "order_id" not in args:
+            resolved = _resolve_order_id(orders, state.get("query_text", ""))
+            if resolved:
+                args["order_id"] = resolved
+        if "order_id" not in args:
+            log_event(
+                "WARN", "No order_id could be resolved, skipping", run_id=run_id, tool=tool_name
+            )
+            return {"action_taken": False}
 
     # Enforce wallet credit limit
     if tool_name == "issue_wallet_credit":
@@ -320,12 +346,11 @@ async def action_dispatcher(
         log_event(
             "ERROR", "Deterministic action failed", run_id=run_id, tool=tool_name, error=str(exc)
         )
-        # Fall back to LLM resolver
         return {"action_taken": False}
 
 
 # ---------------------------------------------------------------------------
-# 4. AGENTIC RESOLVER  (rewritten prompt, tool-first mindset)
+# 4. AGENTIC RESOLVER  (rewritten prompt, tool-first mindset, grounded)
 # ---------------------------------------------------------------------------
 RESOLVER_SYSTEM_PROMPT = """You are a helpful, empathetic customer service agent for Kestral, an Indian e-commerce company.
 
@@ -335,11 +360,16 @@ Decision tree (follow in order):
 1. If the customer reports a late delivery -> IMMEDIATELY call issue_wallet_credit
 2. If the customer wants to return an item -> FIRST call check_refund_eligibility, THEN schedule_return_pickup if eligible
 3. If the customer asks about refund status -> call check_refund_eligibility
-4. If the customer reports a damaged product -> call schedule_return_pickup
+4. If the customer reports a damaged / defective product -> call schedule_return_pickup
 5. If the customer needs policy information -> call search_policies
 6. ONLY if none of the above apply -> provide a text response
 
-When the customer does not specify an order ID, use the most recent order from the "Recent orders" list.
+CRITICAL RULES FOR TOOL CALLS:
+- When a tool requires an `order_id`, you MUST copy the exact `id` field from the
+  "Recent orders" list. NEVER make up an ID.
+- If no order in the list matches, respond: "I couldn't find that order in your
+  recent purchases. Could you double-check the order number?"
+- Do not guess amounts or dates. Use only values returned by the tools.
 
 Rules:
 - Never respond with text alone when a tool is available.
@@ -432,6 +462,22 @@ async def agentic_resolver(
         tool_name = result.get("tool")
         tool_args = result.get("args", {})
 
+        # ---- Grounding: validate order_id if required ----
+        if tool_name in ("check_refund_eligibility", "schedule_return_pickup"):
+            order_id = tool_args.get("order_id")
+            if order_id:
+                known_ids = {o.get("id") for o in orders if o.get("id")}
+                if order_id not in known_ids:
+                    tool_output = {"error": f"Order ID {order_id} not found in your recent orders."}
+                    tool_results.append(
+                        {"tool": tool_name, "args": tool_args, "result": tool_output}
+                    )
+                    messages.append({"role": "assistant", "content": json.dumps(result)})
+                    messages.append(
+                        {"role": "user", "content": f"Tool result: {_safe_json_dumps(tool_output)}"}
+                    )
+                    continue  # skip actual MCP call
+
         if tool_name == "search_policies":
             try:
                 policy_results = await asyncio.to_thread(
@@ -495,7 +541,7 @@ async def agentic_resolver(
 
 
 # ---------------------------------------------------------------------------
-# 5. RESPONSE FORMATTER  (polishes user-facing message)
+# 5. RESPONSE FORMATTER  (polishes user-facing message, grounded on tool output)
 # ---------------------------------------------------------------------------
 async def response_formatter(
     state: AgentState,
@@ -503,11 +549,12 @@ async def response_formatter(
 ) -> dict[str, Any]:
     """
     Convert tool results or LLM output into a polished customer message.
+    When tool results exist, the message is built from them; raw LLM text is
+    only used when no tool was called.
     """
     run_id = state.get("run_id", "")
     log_event("INFO", "Node started", node="response_formatter", run_id=run_id)
 
-    # If the action_dispatcher already produced a tool result, format it
     tool_results = state.get("tool_results") or []
     customer_ctx = state.get("customer_context") or {}
     customer = customer_ctx.get("customer") or {}
@@ -518,13 +565,22 @@ async def response_formatter(
         tool_name = last.get("tool", "")
         result = last.get("result", {})
 
+        # If the result is a string (shouldn't happen after normalisation, but safe)
+        if isinstance(result, str):
+            try:
+                result = json.loads(result)
+            except Exception:
+                result = {"text": result}
+
         # Wallet credit
         if tool_name == "issue_wallet_credit":
-            if result.get("status") == "issued":
+            if isinstance(result, dict) and result.get("status") == "issued":
+                amount = result.get("amount", "unknown")
+                txn_id = result.get("transaction_id", "")
                 return {
                     "final_response": (
-                        f"{customer_name}, I've issued Rs.{result['amount']:.0f} as store credit "
-                        f"(transaction #{result['transaction_id']}) for the inconvenience. "
+                        f"{customer_name}, I've issued Rs.{amount} as store credit "
+                        f"(transaction #{txn_id}) for the inconvenience. "
                         "This will reflect in your wallet within 24 hours. Is there anything else I can help with?"
                     ),
                     "resolution_type": "auto_resolved",
@@ -532,15 +588,15 @@ async def response_formatter(
             else:
                 return {
                     "final_response": (
-                        f"{customer_name}, I tried to issue a credit but it was rejected: {result.get('reason', 'unknown')}. "
-                        "I'll escalate this for you."
+                        f"{customer_name}, I tried to issue a credit but it was rejected: "
+                        f"{result.get('reason', 'unknown reason')}. I'll escalate this for you."
                     ),
                     "resolution_type": "escalated",
                 }
 
         # Refund eligibility
         if tool_name == "check_refund_eligibility":
-            if result.get("eligible"):
+            if isinstance(result, dict) and result.get("eligible"):
                 return {
                     "final_response": (
                         f"{customer_name}, your order is eligible for a refund of Rs.{result['amount']}. "
@@ -549,34 +605,56 @@ async def response_formatter(
                     "resolution_type": "auto_resolved",
                 }
             else:
+                reason = (
+                    result.get("reason", "not eligible")
+                    if isinstance(result, dict)
+                    else "not eligible"
+                )
                 return {
                     "final_response": (
-                        f"{customer_name}, I checked your refund eligibility: {result.get('reason', 'not eligible')}. "
+                        f"{customer_name}, I checked your refund eligibility: {reason}. "
                         "If you believe this is an error, I can escalate your case."
                     ),
                     "resolution_type": "auto_resolved",
                 }
 
-        # Return pickup scheduled
+        # Return pickup
         if tool_name == "schedule_return_pickup":
-            if result.get("status") == "scheduled":
+            if isinstance(result, dict) and result.get("status") == "scheduled":
+                pickup = result.get("pickup_date", "soon")
                 return {
                     "final_response": (
-                        f"{customer_name}, a return pickup has been scheduled for {result['pickup_date']}. "
+                        f"{customer_name}, a return pickup has been scheduled for {pickup}. "
                         "Once the item is received and inspected, your refund will be processed within 5-7 business days."
                     ),
                     "resolution_type": "auto_resolved",
                 }
             else:
+                reason = result.get("reason", "unknown") if isinstance(result, dict) else "unknown"
                 return {
                     "final_response": (
-                        f"{customer_name}, I couldn't schedule the pickup: {result.get('reason', 'unknown')}. "
-                        "Let me escalate this for you."
+                        f"{customer_name}, I couldn't schedule the pickup: {reason}. Let me escalate this for you."
                     ),
                     "resolution_type": "escalated",
                 }
 
-    # Fall back to the existing final_response (from LLM or previous node)
+        # Generic tool result (unknown tool or error)
+        if isinstance(result, dict) and result.get("error"):
+            return {
+                "final_response": (
+                    f"{customer_name}, I ran into an issue while processing your request: {result['error']}. "
+                    "I'll escalate this to our team."
+                ),
+                "resolution_type": "escalated",
+            }
+
+        # Fallback for any other successful tool call
+        return {
+            "final_response": f"{customer_name}, I've processed your request. Is there anything else I can help with?",
+            "resolution_type": "auto_resolved",
+        }
+
+    # No tool results use the LLM's raw final_response
     final_response = (
         state.get("final_response") or "I wasn't able to process your request. Let me escalate it."
     )
