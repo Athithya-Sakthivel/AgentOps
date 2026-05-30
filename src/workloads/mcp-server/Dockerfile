@@ -3,35 +3,39 @@
 # =============================================================================
 FROM python:3.13.12-slim@sha256:f1927c75e81efd1e091dbd64b6c0ecaa5630b38635a3d1c04034ac636e1f94c8
 
+# Set Python to run unbuffered and not write .pyc files
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONPATH=/app/src \
-    OTEL_SERVICE_NAME=mcp-server \
-    OTEL_EXPORTER_OTLP_ENDPOINT=http://signoz-otel-collector.signoz.svc.cluster.local:4317 \
-    OTEL_EXPORTER_OTLP_INSECURE=true \
-    OTEL_LOG_LEVEL=INFO \
-    LOG_LEVEL=INFO \
+    PYTHONPATH=/app/src
+
+# Application configuration (no OpenTelemetry)
+ENV LOG_LEVEL=INFO \
     DEPLOYMENT_ENVIRONMENT=production \
-    SERVICE_VERSION=0.1.0 \
+    SERVICE_VERSION=1.0.0 \
     HOST=0.0.0.0 \
     PORT=8001
 
+# Install only the packages needed for health checks and runtime
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl libssl3 \
-    && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
 
+# Create a non‑root user
 RUN groupadd -g 1000 appgroup \
-    && useradd -m -u 1000 -g appgroup -s /sbin/nologin appuser \
+    && useradd -m -u 1000 -g appgroup -s /usr/sbin/nologin appuser \
     && mkdir -p /app \
     && chown -R appuser:appgroup /app
 
 WORKDIR /app
+
+# Install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY --chown=appuser:appgroup src/ /app/src/
+# Copy the application code
+COPY src/ /app/src/
 
+# Remove setuid/setgid bits and world‑writable directories for security
 RUN find /app -type f -perm /6000 -exec chmod ug-s {} \; 2>/dev/null || true \
     && find /app -type d -perm /o+w -exec chmod o-w {} \; 2>/dev/null || true
 

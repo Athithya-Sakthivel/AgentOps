@@ -22,54 +22,65 @@ def _normalise_tool_result(result: Any) -> Any:
     Convert any LangChain / MCP wrapper into a plain Python value.
 
     Handles:
-    - ToolMessage objects (with a .content attribute)
+    - ToolMessage objects (prioritises .artifact over .content)
     - Plain lists of {"type":"text","text":"..."} dicts
+    - Complex dicts (order objects, etc.) preserved as-is
+    - MCP envelope {"result": <payload>}
     - Already-plain strings / dicts / lists
     - JSON strings inside text blocks (parsed into dicts)
     """
 
-    # 1.  ToolMessage (has .content)
-    if hasattr(result, "content"):
-        content = result.content
-        if isinstance(content, list) and len(content) > 0:
-            return _normalise_tool_result(content)  # recurse
-        if isinstance(content, str):
-            return _try_parse_json(content)
-        return str(content)
+    # 1.  ToolMessage - check for .artifact first (holds structuredContent from MCP)
+    if hasattr(result, "content") and hasattr(result, "artifact"):
+        if result.artifact is not None:
+            return _normalise_tool_result(result.artifact)
+        if result.content:
+            return _normalise_tool_result(result.content)
+        return ""
 
-    # 2.  List of MCP content blocks
+    # 2.  List of MCP content blocks or other items
     if isinstance(result, list):
         if len(result) == 0:
-            return ""
-        # Single item list with a dict containing "text"
-        if len(result) == 1 and isinstance(result[0], dict) and "text" in result[0]:
-            return _try_parse_json(result[0]["text"])
-        # Multiple items return a list of extracted text values
+            return []
         extracted = []
         for item in result:
-            if isinstance(item, dict) and "text" in item:
-                extracted.append(_try_parse_json(item["text"]))
+            if isinstance(item, dict):
+                keys = set(item.keys())
+                # Pure MCP text block - extract the text
+                if keys == {"type", "text"} or keys == {"text"}:
+                    extracted.append(_try_parse_json(item["text"]))
+                else:
+                    # Complex dict (e.g. order object) - keep as-is
+                    extracted.append(item)
             else:
                 extracted.append(item)
         return extracted
 
-    # 3.  Plain string try to parse as JSON
+    # 3.  MCP envelope: {"result": <payload>}
+    if isinstance(result, dict) and "result" in result:
+        if set(result.keys()) == {"result"}:
+            return _normalise_tool_result(result["result"])
+
+    # 4.  Plain dict - keep as-is, don't recurse (preserves order objects)
+    if isinstance(result, dict):
+        return result
+
+    # 5.  Plain string - try to parse as JSON
     if isinstance(result, str):
         return _try_parse_json(result)
 
-    # 4.  Already a plain dict or other value
+    # 6.  Anything else
     return result
 
 
 def _try_parse_json(text: str) -> Any:
-    """Attempt to parse a string as JSON. If successful and returns a dict, return it.
-    Otherwise return the original string."""
-    try:
-        parsed = json.loads(text)
-        if isinstance(parsed, dict):
-            return parsed
-    except (json.JSONDecodeError, TypeError):
-        pass
+    """Attempt to parse a string as JSON.  Return parsed dict or original string."""
+    stripped = text.strip()
+    if stripped.startswith("{") or stripped.startswith("["):
+        try:
+            return json.loads(stripped)
+        except (json.JSONDecodeError, TypeError):
+            pass
     return text
 
 
@@ -114,7 +125,25 @@ class MCPClientManager:
         tool = self._tools[name]
         try:
             result = await tool.ainvoke(arguments)
-            return _normalise_tool_result(result)
+            normalised = _normalise_tool_result(result)
+
+            # Debug: log what we got vs what we returned
+            if name == "get_recent_orders":
+                log.info(
+                    "DEBUG %s: raw_type=%s, normalised_type=%s, normalised_len=%s",
+                    name,
+                    type(result).__name__,
+                    type(normalised).__name__,
+                    len(normalised) if isinstance(normalised, list) else "N/A",
+                )
+                if isinstance(normalised, list) and len(normalised) > 0:
+                    log.info(
+                        "DEBUG %s: first_item_keys=%s",
+                        name,
+                        list(normalised[0].keys()) if isinstance(normalised[0], dict) else "N/A",
+                    )
+
+            return normalised
         except Exception:
             log.exception("MCP tool call failed: %s", name)
             raise

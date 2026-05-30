@@ -2,342 +2,305 @@
 set -euo pipefail
 
 # =============================================================================
-# AgentOps - Production-Ready End-to-End Test Suite
+# MCP Server — Local Test (No Kubernetes, No OTEL, No Qdrant)
 # =============================================================================
-# Demonstrates:
-#   - Real-time WebSocket chat with LangGraph agent
-#   - Policy inquiry (auto-resolved by Bedrock)
-#   - Late delivery -> automatic wallet credit with real transaction ID
-#   - Damaged product -> return pickup scheduling with real date
-#   - Refund eligibility check with actual DB result
-#   - Fake refund claim with non-existent order ID (should be rejected)
-#   - High-urgency escalation -> ticket creation
-#   - Admin REST endpoints (queue, analytics, overrides)
-#   - Cross-service structured logging with correlation IDs
-#
-# Requirements: python3, curl, websocat, PostgreSQL (Docker), AWS credentials
-# =============================================================================
+# Tests the 9 MCP tools against a local PostgreSQL instance.
+# Uses structured JSON logging with correlation IDs (run_id).
+# No OpenTelemetry, no vector database, no external dependencies except Docker.
 
-# -- Config -------------------------------------------------------------------
+# --- Config ---------------------------------------------------------------
 MCP_PORT="${MCP_PORT:-8001}"
-AGENT_PORT="${AGENT_PORT:-8000}"
 MCP_URL="http://127.0.0.1:${MCP_PORT}"
-AGENT_URL="http://127.0.0.1:${AGENT_PORT}"
+MCP_HTTP="${MCP_URL}/mcp"          # FastMCP HTTP transport
 
-export DATABASE_URL="${DATABASE_URL:-postgresql://agentops:localdev@localhost:5432/kestral}"
-export LLM_API_KEY="${LLM_API_KEY:-}"            # Not required for Bedrock
+# PostgreSQL (must be running via Docker, as set up by setup_postgres.py)
+POSTGRES_HOST="${POSTGRES_HOST:-localhost}"
+POSTGRES_PORT="${POSTGRES_PORT:-5432}"
+POSTGRES_USER="${POSTGRES_USER:-agentops}"
+POSTGRES_DB="${POSTGRES_DB:-kestral}"
+# Password is hardcoded 'localdev' in the seed script; we'll use it directly.
+DATABASE_URL="postgresql://agentops:localdev@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}"
 
-command -v python3  >/dev/null 2>&1 || { echo "[FATAL] python3 missing"  >&2; exit 1; }
-command -v curl     >/dev/null 2>&1 || { echo "[FATAL] curl missing"     >&2; exit 1; }
-command -v websocat >/dev/null 2>&1 || { echo "[FATAL] websocat missing" >&2; exit 1; }
+# We'll generate a unique run_id for each test to validate correlation.
+RUN_ID="test-$(date +%s)-$$"
 
+# --- Prerequisites ---------------------------------------------------------
+command -v python3  >/dev/null 2>&1 || { echo "[ERROR] python3 not found"  >&2; exit 1; }
+command -v curl     >/dev/null 2>&1 || { echo "[ERROR] curl not found"     >&2; exit 1; }
+command -v fastmcp  >/dev/null 2>&1 || { echo "[ERROR] fastmcp not found. Install with: pip install fastmcp"  >&2; exit 1; }
+
+# --- Global state ----------------------------------------------------------
 MCP_PID=""
-AGENT_PID=""
-PASSED=0
-FAILED=0
+declare -a RESULTS
 
-# -- Helpers ------------------------------------------------------------------
 cleanup() {
   set +e
   echo ""
-  echo "=============================================================================="
-  echo "  CLEANUP: Stopping services..."
-  kill -INT "${AGENT_PID}" 2>/dev/null || true
+  echo "[CLEANUP] Stopping mcp-server (PID ${MCP_PID})..."
   kill -INT "${MCP_PID}" 2>/dev/null || true
-  sleep 2
-  echo "  CLEANUP: Done."
+  sleep 1
+  echo "[CLEANUP] Done."
+  set -e
 }
 trap cleanup EXIT
 
-pass() { PASSED=$((PASSED+1)); echo "  PASS | $*"; }
-fail() { FAILED=$((FAILED+1)); echo "  FAIL | $*"; }
+record_pass() {
+  local name="$1" detail="$2"
+  echo "  [PASS] ${name}"
+  [[ -n "${detail}" ]] && echo "         ${detail}"
+  RESULTS+=("PASS: ${name}")
+}
+record_fail() {
+  local name="$1" detail="$2"
+  echo "  [FAIL] ${name}"
+  [[ -n "${detail}" ]] && echo "         ${detail}"
+  RESULTS+=("FAIL: ${name}")
+}
 
-# -- 1. Start mcp-server ------------------------------------------------------
+# =============================================================================
+# STEP 1: Verify PostgreSQL is running and reachable
+# =============================================================================
 echo ""
 echo "=============================================================================="
-echo "  1. Starting MCP Server"
+echo "[STEP 1/4] Checking PostgreSQL..."
+echo "=============================================================================="
+if timeout 1 bash -c "echo >/dev/tcp/${POSTGRES_HOST}/${POSTGRES_PORT}" 2>/dev/null; then
+  echo "  PostgreSQL reachable at ${POSTGRES_HOST}:${POSTGRES_PORT}"
+  record_pass "PostgreSQL connectivity" "reachable"
+else
+  echo "[FATAL] PostgreSQL not reachable at ${POSTGRES_HOST}:${POSTGRES_PORT}"
+  echo "        Ensure the Docker container 'kestral-postgres' is running."
+  exit 1
+fi
+
+# Verify we can query the database
+if PGPASSWORD=localdev psql -h "${POSTGRES_HOST}" -p "${POSTGRES_PORT}" -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -c "SELECT 1;" >/dev/null 2>&1; then
+  record_pass "PostgreSQL query" "SELECT 1 succeeded"
+else
+  echo "[FATAL] Cannot execute query on PostgreSQL"
+  exit 1
+fi
+
+# =============================================================================
+# STEP 2: Start mcp-server as a local process
+# =============================================================================
+echo ""
+echo "=============================================================================="
+echo "[STEP 2/4] Starting mcp-server..."
 echo "=============================================================================="
 
-lsof -ti tcp:${MCP_PORT} | xargs kill -9 2>/dev/null || true
-
-cd src/workloads/mcp-server
-python3 -m venv .venv 2>/dev/null || true
+# Ensure we have a virtual environment with dependencies
+if [ ! -d .venv ]; then
+  echo "  Creating virtual environment..."
+  python3 -m venv .venv
+fi
 source .venv/bin/activate
 pip install -q -r requirements.txt 2>/dev/null || true
 
+export DATABASE_URL="${DATABASE_URL}"
+export LOG_LEVEL="${LOG_LEVEL:-INFO}"
 export PORT="${MCP_PORT}"
-export LOG_LEVEL="INFO"
 
-python3 src/main.py > /tmp/mcp-server-e2e.log 2>&1 &
+echo "  DATABASE_URL = postgresql://agentops:***@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}"
+echo "  LOG_LEVEL    = ${LOG_LEVEL}"
+echo "  PORT         = ${PORT}"
+echo "  Log file     = /tmp/mcp-server.log"
+
+python3 src/main.py > /tmp/mcp-server.log 2>&1 &
 MCP_PID=$!
+echo "  Process PID  = ${MCP_PID}"
 
-for ((i=0; i<20; i++)); do
-  if curl -fsS --max-time 2 "${MCP_URL}/readyz" 2>/dev/null | grep -q "ready"; then
-    echo "  mcp-server ready (PID ${MCP_PID})"
-    break
-  fi
-  sleep 1
-done
-cd - >/dev/null
-
-# -- 2. Start agent-service ---------------------------------------------------
+# Wait for readiness
 echo ""
-echo "=============================================================================="
-echo "  2. Starting Agent Service"
-echo "=============================================================================="
-
-cd src/workloads/agent-service
-python3 -m venv .venv 2>/dev/null || true
-source .venv/bin/activate
-pip install -q -r requirements.txt 2>/dev/null || true
-
-export MCP_SERVER_URL="${MCP_URL}/mcp"
-export PORT="${AGENT_PORT}"
-export LOG_LEVEL="INFO"
-
-python3 src/main.py > /tmp/agent-service-e2e.log 2>&1 &
-AGENT_PID=$!
-
+echo "[STEP 3/4] Waiting for readiness..."
+READY=0
 for ((i=0; i<30; i++)); do
-  if curl -fsS --max-time 2 "${AGENT_URL}/readyz" 2>/dev/null | grep -q "ready"; then
-    echo "  agent-service ready (PID ${AGENT_PID})"
+  if READYZ=$(curl -fsS --max-time 2 "${MCP_URL}/readyz" 2>/dev/null); then
+    echo "  ${READYZ}"
+    READY=1
     break
   fi
   sleep 1
 done
-cd - >/dev/null
 
-# -- 3. Test Suite -----------------------------------------------------------
-
-# ------------------------------------------------------------------ Test 1
-echo ""
-echo "=============================================================================="
-echo "  TEST 1  - WebSocket - Policy Inquiry (RAG)"
-echo "=============================================================================="
-QUERY1='{"query":"What is the return policy for damaged phones?","user_id":"a1b2c3d4-e5f6-4a7b-8c9d-000000000001"}'
-echo "  SENDING: ${QUERY1}"
-
-WS1=$(echo "${QUERY1}" | websocat -n1 "ws://127.0.0.1:${AGENT_PORT}/ws/chat/test-session-1" 2>/dev/null || echo '{"error":"websocat failed"}')
-echo "  RESPONSE:"
-echo "${WS1}" | python3 -m json.tool --no-ensure-ascii 2>/dev/null || echo "${WS1}"
-
-if echo "${WS1}" | grep -qE '"response"'; then
-  pass "Agent returned a grounded response (auto-resolved)"
-else
-  fail "No 'response' field in output"
+if [[ ${READY} -eq 0 ]]; then
+  echo "[FATAL] Server did not become ready within 30 seconds"
+  tail -20 /tmp/mcp-server.log
+  exit 1
 fi
 
-# ------------------------------------------------------------------ Test 2
-echo ""
-echo "=============================================================================="
-echo "  TEST 2  - WebSocket - Escalation (high-value wrong item)"
-echo "=============================================================================="
-QUERY2='{"query":"I got a charger instead of an iPhone worth 1.45 lakh. This is fraud!","user_id":"a1b2c3d4-e5f6-4a7b-8c9d-000000000001"}'
-echo "  SENDING: ${QUERY2}"
-
-WS2=$(echo "${QUERY2}" | websocat -n1 "ws://127.0.0.1:${AGENT_PORT}/ws/chat/test-session-2" 2>/dev/null || echo '{"error":"websocat failed"}')
-echo "  RESPONSE:"
-echo "${WS2}" | python3 -m json.tool --no-ensure-ascii 2>/dev/null || echo "${WS2}"
-
-if echo "${WS2}" | grep -qE "escalated|ticket_id"; then
-  TICKET=$(echo "${WS2}" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('ticket_id','none'))" 2>/dev/null || echo "parse-error")
-  pass "Escalation succeeded - ticket_id=${TICKET}"
+# Quick check that the process started and log is being written
+sleep 1
+if grep -q "Database pool ready" /tmp/mcp-server.log 2>/dev/null; then
+  echo "  Database pool: ready"
 else
-  fail "Query was not escalated"
+  echo "  Database pool: NOT CONFIRMED — check /tmp/mcp-server.log"
 fi
 
-# ------------------------------------------------------------------ Test 3
+# =============================================================================
+# STEP 4: Test all 9 tools (no search_policies)
+# =============================================================================
 echo ""
 echo "=============================================================================="
-echo "  TEST 3  - Agentic Action - Late Delivery -> Wallet Credit"
+echo "[STEP 4/4] Testing 9 MCP tools..."
 echo "=============================================================================="
-QUERY3='{"query":"My order KST-HYD-006 was supposed to arrive by May 22 but it is still in transit. I want compensation for the delay.","user_id":"a1b2c3d4-e5f6-4a7b-8c9d-000000000006"}'
-echo "  SENDING: ${QUERY3}"
 
-WS3=$(echo "${QUERY3}" | websocat -n1 "ws://127.0.0.1:${AGENT_PORT}/ws/chat/test-session-3" 2>/dev/null || echo '{"error":"websocat failed"}')
-echo "  RESPONSE:"
-echo "${WS3}" | python3 -m json.tool --no-ensure-ascii 2>/dev/null || echo "${WS3}"
+run_tool() {
+  local tool="$1" desc="$2"
+  shift 2
+  echo ""
+  echo "  --- ${tool} ---"
+  echo "  Description: ${desc}"
+  echo "  Arguments:   $*"
 
-if echo "${WS3}" | grep -qE 'WC-[a-f0-9]+'; then
-  TXN=$(echo "${WS3}" | grep -oE 'WC-[a-f0-9]+' | head -1)
-  pass "Late delivery -> wallet credit issued (transaction ${TXN})"
+  local OUTPUT
+  OUTPUT=$(fastmcp call "${MCP_HTTP}" "${tool}" "$@" 2>&1 | grep -v "UserWarning\|oauth.py\|site-packages\|/fastmcp/client/auth/" || true)
+
+  echo "  Response:"
+  echo "${OUTPUT}" | head -30 | sed 's/^/    /'
+
+  # Simple validation: check for expected success indicators
+  if echo "${OUTPUT}" | grep -qE '"result"|"eligible"|"status"|"transaction_id"|"ticket_id"|[a-f0-9]{8}-[a-f0-9]{4}'; then
+    record_pass "${tool}" "Returned expected data"
+  elif echo "${OUTPUT}" | grep -qi "error"; then
+    record_fail "${tool}" "Tool returned an error — see response above"
+  else
+    record_fail "${tool}" "Unexpected response format — see response above"
+  fi
+}
+
+# --- Read tools ---
+run_tool "lookup_customer" \
+  "Find customer by email" \
+  email=priya.sharma@email.com run_id="${RUN_ID}"
+
+run_tool "get_recent_orders" \
+  "Return recent orders for user" \
+  user_id=a1b2c3d4-e5f6-4a7b-8c9d-000000000001 run_id="${RUN_ID}"
+
+run_tool "get_order_details" \
+  "Return full order details" \
+  order_id=c3d4e5f6-a7b8-4c9d-0e1f-000000000001 run_id="${RUN_ID}"
+
+run_tool "check_refund_eligibility" \
+  "Check refund eligibility" \
+  order_id=c3d4e5f6-a7b8-4c9d-0e1f-000000000004 run_id="${RUN_ID}"
+
+# --- Action tools ---
+run_tool "issue_wallet_credit" \
+  "Issue wallet credit" \
+  user_id=a1b2c3d4-e5f6-4a7b-8c9d-000000000001 \
+  amount=100.0 \
+  reason="Test compensation" \
+  run_id="${RUN_ID}"
+
+run_tool "schedule_return_pickup" \
+  "Schedule return pickup" \
+  order_id=c3d4e5f6-a7b8-4c9d-0e1f-000000000001 \
+  pickup_date="2026-06-01" \
+  run_id="${RUN_ID}"
+
+# --- Escalation tools ---
+run_tool "create_ticket" \
+  "Create support ticket" \
+  user_id=a1b2c3d4-e5f6-4a7b-8c9d-000000000001 \
+  query_text="Test ticket from local test" \
+  classification='{"intent":"test","urgency":5,"sentiment":"neutral","auto_resolvable":true}' \
+  priority=medium \
+  assigned_team=general_support \
+  run_id="${RUN_ID}"
+
+run_tool "escalate_to_human" \
+  "Escalate a ticket" \
+  ticket_id=e5f6a7b8-c9d0-4e1f-2a3b-000000000001 \
+  run_id="${RUN_ID}"
+
+run_tool "route_to_team" \
+  "Route ticket to team" \
+  ticket_id=e5f6a7b8-c9d0-4e1f-2a3b-000000000001 \
+  team=payments \
+  run_id="${RUN_ID}"
+
+# =============================================================================
+# Verify tool count
+# =============================================================================
+echo ""
+echo "--- Verifying registered tools ---"
+TOOL_LIST=$(fastmcp list "${MCP_HTTP}" 2>&1 | grep -v "UserWarning\|oauth.py\|site-packages\|/fastmcp/client/auth/" || true)
+echo "${TOOL_LIST}"
+# To this (exclude the "Tools (9)" header line):
+TOOL_COUNT=$(echo "${TOOL_LIST}" | grep -cE "^\s{2}[a-z_]+\(.*\)" || true)
+echo "  Tools registered: ${TOOL_COUNT}"
+if [[ "${TOOL_COUNT}" -eq 9 ]]; then
+  record_pass "9 tools registered" "All 9 tools present"
 else
-  fail "No wallet credit transaction ID found"
+  record_fail "9 tools registered" "Found ${TOOL_COUNT}, expected 9"
 fi
 
-# ------------------------------------------------------------------ Test 4
+# =============================================================================
+# Check structured logging (correlation ID)
+# =============================================================================
 echo ""
-echo "=============================================================================="
-echo "  TEST 4  - Agentic Action - Damaged Product -> Return Pickup"
-echo "=============================================================================="
-QUERY4='{"query":"The Nike shoes I received have a defect - the sole is coming off. I want a return pickup scheduled.","user_id":"a1b2c3d4-e5f6-4a7b-8c9d-000000000007"}'
-echo "  SENDING: ${QUERY4}"
+echo "--- Checking structured logs for run_id: ${RUN_ID} ---"
 
-WS4=$(echo "${QUERY4}" | websocat -n1 "ws://127.0.0.1:${AGENT_PORT}/ws/chat/test-session-4" 2>/dev/null || echo '{"error":"websocat failed"}')
-echo "  RESPONSE:"
-echo "${WS4}" | python3 -m json.tool --no-ensure-ascii 2>/dev/null || echo "${WS4}"
-
-if echo "${WS4}" | grep -qE '2026-[0-9]{2}-[0-9]{2}|scheduled'; then
-  pass "Damaged product -> return pickup scheduled"
+LOG_LINES=$(grep "${RUN_ID}" /tmp/mcp-server.log 2>/dev/null || echo "")
+if [[ -n "${LOG_LINES}" ]]; then
+  LINE_COUNT=$(echo "${LOG_LINES}" | wc -l)
+  echo "  Found ${LINE_COUNT} log lines with run_id"
+  record_pass "Structured logging with run_id" "${LINE_COUNT} log lines"
 else
-  fail "No return pickup confirmation found"
+  record_fail "Structured logging with run_id" "No log lines found — check /tmp/mcp-server.log"
 fi
 
-# ------------------------------------------------------------------ Test 5
+# =============================================================================
+# Health endpoints
+# =============================================================================
 echo ""
-echo "=============================================================================="
-echo "  TEST 5  - Agentic Action - Refund Eligibility Check"
-echo "=============================================================================="
-QUERY5='{"query":"I received a charger instead of my iPhone. I want to check if my order is eligible for a refund.","user_id":"a1b2c3d4-e5f6-4a7b-8c9d-000000000004"}'
-echo "  SENDING: ${QUERY5}"
+echo "--- Checking health endpoints ---"
+HEALTHZ=$(curl -fsS --max-time 2 "${MCP_URL}/healthz" 2>/dev/null || echo "FAIL")
+READYZ=$(curl -fsS --max-time 2 "${MCP_URL}/readyz" 2>/dev/null || echo "FAIL")
+echo "  GET /healthz : ${HEALTHZ}"
+echo "  GET /readyz  : ${READYZ}"
 
-WS5=$(echo "${QUERY5}" | websocat -n1 "ws://127.0.0.1:${AGENT_PORT}/ws/chat/test-session-5" 2>/dev/null || echo '{"error":"websocat failed"}')
-echo "  RESPONSE:"
-echo "${WS5}" | python3 -m json.tool --no-ensure-ascii 2>/dev/null || echo "${WS5}"
-
-if echo "${WS5}" | grep -qiE 'eligible|not eligible'; then
-  pass "Refund eligibility check returned a result"
+if [[ "${HEALTHZ}" == "ok" ]]; then
+  record_pass "Health endpoint /healthz" "Returned 'ok' (200)"
 else
-  fail "No eligibility determination found"
+  record_fail "Health endpoint /healthz" "Got: ${HEALTHZ}"
+fi
+if [[ "${READYZ}" == "ready" ]]; then
+  record_pass "Health endpoint /readyz" "Returned 'ready' (200)"
+else
+  record_fail "Health endpoint /readyz" "Got: ${READYZ}"
 fi
 
-# ------------------------------------------------------------------ Test 6
+# =============================================================================
+# Summary
+# =============================================================================
 echo ""
 echo "=============================================================================="
-echo "  TEST 6  - Grounding - Fake Refund Claim with Non-existent Order ID"
+echo "  Summary"
 echo "=============================================================================="
-QUERY6='{"query":"I want a full refund for order ID ORD-99999 that I never received.","user_id":"a1b2c3d4-e5f6-4a7b-8c9d-000000000001"}'
-echo "  SENDING: ${QUERY6}"
+for result in "${RESULTS[@]}"; do
+  echo "    ${result}"
+done
 
-WS6=$(echo "${QUERY6}" | websocat -n1 "ws://127.0.0.1:${AGENT_PORT}/ws/chat/test-session-6" 2>/dev/null || echo '{"error":"websocat failed"}')
-echo "  RESPONSE:"
-echo "${WS6}" | python3 -m json.tool --no-ensure-ascii 2>/dev/null || echo "${WS6}"
-
-# The system should reject the request and not issue any credit or pickup
-if echo "${WS6}" | grep -qiE "not found|no.*order|couldn't find|unable to find|cannot find|doesn't exist|invalid order"; then
-  pass "Fake refund claim correctly rejected (order not found)"
-else
-  fail "System did not reject the fake refund claim - possible hallucination"
-fi
-
-# ------------------------------------------------------------------ Test 7
+FAIL_COUNT=$(printf '%s\n' "${RESULTS[@]}" | grep -c "^FAIL:" || true)
+PASS_COUNT=$(printf '%s\n' "${RESULTS[@]}" | grep -c "^PASS:" || true)
 echo ""
-echo "=============================================================================="
-echo "  TEST 7  - Admin - Ticket Queue"
-echo "=============================================================================="
-echo "  GET ${AGENT_URL}/admin/queue"
+echo "  =============================================="
+echo "  TOTAL: ${PASS_COUNT} passed, ${FAIL_COUNT} failed"
+echo "  =============================================="
 
-QUEUE=$(curl -fsS --max-time 5 "${AGENT_URL}/admin/queue" 2>/dev/null || echo '{"error":"failed"}')
-echo "  RESPONSE:"
-echo "${QUEUE}" | python3 -m json.tool --no-ensure-ascii 2>/dev/null || echo "${QUEUE}"
-
-TICKET_COUNT=$(echo "${QUEUE}" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('count',0))" 2>/dev/null || echo 0)
-if [ "${TICKET_COUNT}" -gt 0 ] 2>/dev/null; then
-  pass "Queue contains ${TICKET_COUNT} tickets"
-else
-  fail "Queue empty - expected tickets after escalation test"
-fi
-
-# ------------------------------------------------------------------ Test 8
-echo ""
-echo "=============================================================================="
-echo "  TEST 8  - Admin - Analytics"
-echo "=============================================================================="
-echo "  GET ${AGENT_URL}/admin/analytics"
-
-ANALYTICS=$(curl -fsS --max-time 5 "${AGENT_URL}/admin/analytics" 2>/dev/null || echo '{"error":"failed"}')
-echo "  RESPONSE:"
-echo "${ANALYTICS}" | python3 -m json.tool --no-ensure-ascii 2>/dev/null || echo "${ANALYTICS}"
-
-if echo "${ANALYTICS}" | grep -q '"total_tickets"'; then
-  pass "Analytics returned metrics"
-else
-  fail "Analytics endpoint failed"
-fi
-
-# ------------------------------------------------------------------ Test 9
-echo ""
-echo "=============================================================================="
-echo "  TEST 9  - Admin - Override"
-echo "=============================================================================="
-OVERRIDE_PAYLOAD='{"ticket_id":"e5f6a7b8-c9d0-4e1f-2a3b-000000000001","original_classification":{"intent":"test"},"corrected_classification":{"intent":"corrected"},"reason":"e2e test","overridden_by":"tester"}'
-echo "  POST ${AGENT_URL}/admin/override"
-echo "       ${OVERRIDE_PAYLOAD}"
-
-OVERRIDE=$(curl -fsS --max-time 5 -X POST "${AGENT_URL}/admin/override" \
-  -H "Content-Type: application/json" \
-  -d "${OVERRIDE_PAYLOAD}" 2>/dev/null || echo '{"error":"failed"}')
-
-echo "  RESPONSE:"
-echo "${OVERRIDE}" | python3 -m json.tool --no-ensure-ascii 2>/dev/null || echo "${OVERRIDE}"
-
-if echo "${OVERRIDE}" | grep -q '"status"'; then
-  pass "Override stored"
-else
-  fail "Override failed"
-fi
-
-# ------------------------------------------------------------------ Test 10
-echo ""
-echo "=============================================================================="
-echo "  TEST 10  - Observability - Agent Logs with Correlation ID"
-echo "=============================================================================="
-echo "  Checking /tmp/agent-service-e2e.log"
-
-AGENT_RUN_COUNT=$(grep -cE '"run_id": "[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}"' /tmp/agent-service-e2e.log 2>/dev/null || echo 0)
-echo "  Log lines with a valid run_id UUID: ${AGENT_RUN_COUNT}"
-
-if [ "${AGENT_RUN_COUNT}" -gt 0 ] 2>/dev/null; then
-  pass "${AGENT_RUN_COUNT} agent log lines include a correlation ID"
-else
-  fail "No correlation IDs found in agent logs"
-fi
-
-# ------------------------------------------------------------------ Test 11
-echo ""
-echo "=============================================================================="
-echo "  TEST 11  - Observability - MCP Server Logs with Propagated run_id"
-echo "=============================================================================="
-echo "  Checking /tmp/mcp-server-e2e.log"
-
-MCP_RUN_COUNT=$(grep -cE '"run_id": "[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}"' /tmp/mcp-server-e2e.log 2>/dev/null || echo 0)
-echo "  Log lines with a valid run_id UUID: ${MCP_RUN_COUNT}"
-
-if [ "${MCP_RUN_COUNT}" -gt 0 ] 2>/dev/null; then
-  pass "${MCP_RUN_COUNT} MCP server log lines include a correlation ID (propagated from agent)"
-else
-  fail "No correlation IDs in MCP logs - run_id not propagated?"
-fi
-
-# ------------------------------------------------------------------ Test 12
-echo ""
-echo "=============================================================================="
-echo "  TEST 12  - Observability - Structured JSON Format"
-echo "=============================================================================="
-echo "  Checking /tmp/agent-service-e2e.log for structured JSON lines"
-
-STRUCTURED_COUNT=$(grep -cE '"timestamp".*"level".*"message"' /tmp/agent-service-e2e.log 2>/dev/null || echo 0)
-echo "  Lines containing timestamp, level, and message: ${STRUCTURED_COUNT}"
-
-if [ "${STRUCTURED_COUNT}" -gt 0 ] 2>/dev/null; then
-  pass "${STRUCTURED_COUNT} structured JSON log lines found"
-else
-  fail "No structured JSON log lines - expected timestamp/level/message fields"
-fi
-
-# -- Final Summary -----------------------------------------------------------
-echo ""
-echo "=============================================================================="
-echo "  TEST SUITE COMPLETE"
-echo "=============================================================================="
-echo "  PASSED : ${PASSED}"
-echo "  FAILED : ${FAILED}"
-echo ""
-
-if [ "${FAILED}" -eq 0 ]; then
-  echo "  AgentOps is fully operational and agentic."
+if [[ "${FAIL_COUNT}" -eq 0 ]]; then
+  echo ""
+  echo "  mcp-server is working correctly — all checks passed."
   exit 0
 else
-  echo "  ${FAILED} test(s) failed - review the output above for details."
+  echo ""
+  echo "  ${FAIL_COUNT} check(s) failed — review details above."
+  echo ""
+  echo "  Debugging tips:"
+  echo "    Server logs : cat /tmp/mcp-server.log"
+  echo "    Manual test : fastmcp call http://localhost:${MCP_PORT}/mcp lookup_customer email=priya.sharma@email.com"
   exit 1
 fi
