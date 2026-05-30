@@ -10,10 +10,10 @@ import uuid
 
 from db import AsyncSessionLocal, HumanOverride, Ticket
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from logging_utils import log_event  # shared helper
+from logging_utils import log_event
 from pydantic import BaseModel
 from sqlalchemy import func, select
-from state import AgentState, Context
+from state import Context
 
 log = logging.getLogger("agent-service")
 router = APIRouter()
@@ -30,6 +30,21 @@ class OverrideRequest(BaseModel):
     corrected_classification: dict
     reason: str | None = None
     overridden_by: str | None = None
+
+
+def _unwrap_ticket_id(ticket_id: object) -> str | None:
+    """Extract a plain string ticket_id from MCP adapter wrapper types."""
+    if ticket_id is None:
+        return None
+    if isinstance(ticket_id, str):
+        return ticket_id
+    if isinstance(ticket_id, list):
+        for item in ticket_id:
+            if isinstance(item, dict) and "text" in item:
+                return str(item["text"])
+            if isinstance(item, str):
+                return item
+    return str(ticket_id)
 
 
 @router.websocket("/ws/chat/{session_id}")
@@ -55,8 +70,7 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
             run_id = str(uuid.uuid4())
             log_event("INFO", "Message received", run_id=run_id, session_id=session_id)
 
-            # pyright: ignore[reportAssignmentType] -- dict literals work at runtime
-            state: AgentState = {  # type: ignore[assignment]
+            state = {
                 "messages": [{"role": "user", "content": query}],
                 "query_text": query,
                 "user_id": data.get("user_id"),
@@ -81,6 +95,9 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
             config = {"configurable": {"thread_id": session_id}}
             result = await graph.ainvoke(state, config, context=ctx)
 
+            # Normalize ticket_id that may be wrapped by LangChain adapters
+            clean_ticket_id = _unwrap_ticket_id(result.get("ticket_id"))
+
             log_event(
                 "INFO",
                 "Message processed",
@@ -92,7 +109,7 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                 {
                     "response": result.get("final_response", ""),
                     "resolution_type": result.get("resolution_type"),
-                    "ticket_id": result.get("ticket_id"),
+                    "ticket_id": clean_ticket_id,
                 }
             )
 
