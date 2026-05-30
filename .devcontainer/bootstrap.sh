@@ -21,7 +21,9 @@ curl -fsSL https://get.opentofu.org/install-opentofu.sh | sh -s -- --install-met
 python3 -m pip install --break-system-packages -q \
   pytest==9.0.3 \
   pre-commit==4.2.0 \
-  sqlalchemy[asyncio]==2.0.50 asyncpg==0.31.0
+  sqlalchemy[asyncio]==2.0.50 asyncpg==0.31.0 \
+  boto3==1.43.18 \
+  httpx==0.28.1 
 
 pre-commit install --install-hooks
 
