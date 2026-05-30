@@ -413,8 +413,6 @@ class Ticket(Base):
 async def seed(engine, session_factory):
     """Drop existing tables, recreate, and populate with JSON data."""
     print("Dropping existing tables...")
-    # Security: table names are from SQLAlchemy ORM model __tablename__ attributes,
-    # which are hardcoded string literals. No user input reaches here.
     async with engine.begin() as conn:
         for table in (
             Billing.__table__,
@@ -423,7 +421,7 @@ async def seed(engine, session_factory):
             Product.__table__,
             User.__table__,
         ):
-            await conn.execute(text(f"DROP TABLE IF EXISTS {table.name} CASCADE"))
+            await conn.run_sync(table.drop, checkfirst=True)
 
     print("Creating tables...")
     async with engine.begin() as conn:
