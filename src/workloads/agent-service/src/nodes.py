@@ -114,6 +114,21 @@ async def guardrail_classifier(
     }
 
 
+def _unwrap_nested_json(text: str) -> str:
+    """If the LLM returns a JSON string containing a final_answer, extract the inner response."""
+    if not isinstance(text, str):
+        return str(text)
+    stripped = text.strip()
+    if stripped.startswith("{") and '"action"' in stripped:
+        try:
+            inner = json.loads(stripped)
+            if isinstance(inner, dict) and "response" in inner:
+                return inner["response"]
+        except (json.JSONDecodeError, KeyError):
+            pass
+    return text
+
+
 # ======================================================================
 # 2. CONTEXT GATHERER
 # ======================================================================
@@ -245,6 +260,7 @@ async def agentic_resolver(
             raw = await resolver_lm.acall(messages=messages)
             raw_text = raw[0] if isinstance(raw, list) else raw
             final_response = raw_text if isinstance(raw_text, str) else str(raw_text)
+            final_response = _unwrap_nested_json(final_response)
             log_event("INFO", "Forced final answer", run_id=run_id)
             return {
                 "final_response": final_response,
@@ -256,9 +272,11 @@ async def agentic_resolver(
         log_event("INFO", "Resolver action", run_id=run_id, step=step, action=action)
 
         if action == "final_answer":
+            final_text = result["response"]
+            final_text = _unwrap_nested_json(final_text)
             log_event("INFO", "Resolution complete", run_id=run_id, steps=step + 1)
             return {
-                "final_response": result["response"],
+                "final_response": final_text,
                 "resolution_type": "auto_resolved",
                 "tool_results": tool_results,
             }
@@ -336,6 +354,7 @@ async def agentic_resolver(
     raw = await resolver_lm.acall(messages=messages)
     raw_text = raw[0] if isinstance(raw, list) else raw
     final_response = raw_text if isinstance(raw_text, str) else str(raw_text)
+    final_response = _unwrap_nested_json(final_response)
     log_event("INFO", "Max steps reached, forced final answer", run_id=run_id)
     return {
         "final_response": final_response,
@@ -381,6 +400,7 @@ async def human_escalate(
     sla = "2 hours" if urgency >= 9 else "4 hours" if urgency >= 7 else "24 hours"
     team = TEAM_ROUTING.get(intent, "general_support")
 
+    ticket_id = "unknown"
     try:
         ticket_id = await mcp_client.call_tool(
             "create_ticket",
@@ -403,7 +423,6 @@ async def human_escalate(
         )
     except Exception:
         log_event("ERROR", "Failed to create ticket", run_id=run_id)
-        ticket_id = "unknown"
 
     response = (
         f"{customer.get('full_name', 'Hello')}, your issue has been flagged as "
