@@ -13,6 +13,21 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 log = logging.getLogger("agent-service")
 
 
+def _normalise_tool_result(result: Any) -> Any:
+    """Extract plain value from LangChain ToolMessage / MCP content."""
+    if hasattr(result, "content"):
+        content = result.content
+        if isinstance(content, list) and len(content) > 0:
+            first = content[0]
+            if isinstance(first, dict) and "text" in first:
+                return first["text"]
+            if isinstance(first, str):
+                return first
+            return str(first)
+        return content
+    return result
+
+
 class MCPClientManager:
     """Manages connection to the mcp-server and exposes tools as callable methods."""
 
@@ -29,13 +44,14 @@ class MCPClientManager:
                 }
             }
         )
-        tools = await self._client.get_tools()  # pyright: ignore[reportOptionalMemberAccess]
-        self._tools = {tool.name: tool for tool in tools}
-        log.info(
-            "MCP client connected - %d tools loaded: %s",
-            len(self._tools),
-            list(self._tools.keys()),
-        )
+        if self._client is not None:
+            tools = await self._client.get_tools()
+            self._tools = {tool.name: tool for tool in tools}
+            log.info(
+                "MCP client connected - %d tools loaded: %s",
+                len(self._tools),
+                list(self._tools.keys()),
+            )
 
     async def close(self):
         self._client = None
@@ -48,22 +64,12 @@ class MCPClientManager:
         if name not in self._tools:
             raise ValueError(f"Unknown tool: {name}. Available: {list(self._tools.keys())}")
 
-        # inject correlation ID so mcp-server logs contain run_id
         arguments = {**arguments, "run_id": run_id}
 
         tool = self._tools[name]
         try:
             result = await tool.ainvoke(arguments)
-            # Normalise any LangChain ToolMessage to a plain string
-            if hasattr(result, "content"):
-                content = result.content
-                if isinstance(content, list) and len(content) > 0:
-                    first = content[0]
-                    if hasattr(first, "text"):
-                        return first.text
-                    return str(first)
-                return content
-            return result
+            return _normalise_tool_result(result)
         except Exception:
             log.exception("MCP tool call failed: %s", name)
             raise

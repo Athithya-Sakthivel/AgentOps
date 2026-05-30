@@ -50,9 +50,7 @@ async def compile_graph(checkpointer: AsyncPostgresSaver | None = None):
     builder = build_graph()
 
     if checkpointer is None:
-        async with AsyncPostgresSaver.from_conn_string(
-            settings.database_url.replace("postgresql://", "postgresql+asyncpg://")
-        ) as cp:
+        async with AsyncPostgresSaver.from_conn_string(settings.database_url) as cp:
             await cp.setup()
             graph = builder.compile(checkpointer=cp)
             log.info("Graph compiled with AsyncPostgresSaver")

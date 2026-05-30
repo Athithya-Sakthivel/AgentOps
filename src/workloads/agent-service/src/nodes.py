@@ -2,7 +2,6 @@
 LangGraph node implementations - production ready.
 
 All nodes receive Runtime[Context] and use structured logging with run_id.
-No OpenTelemetry.
 """
 
 from __future__ import annotations
@@ -22,6 +21,46 @@ from state import AgentState, Context
 log = logging.getLogger("agent-service")
 
 
+def _prediction_to_dict(pred: Any) -> dict[str, Any]:
+    if pred is None:
+        return {}
+    if isinstance(pred, dict):
+        return pred
+    result = {}
+    for key, value in pred.items():
+        if key.startswith("_"):
+            continue
+        result[key] = value
+    return result
+
+
+def _safe_json_dumps(obj: Any) -> str:
+    if obj is None:
+        return "null"
+    if isinstance(obj, dict):
+        return json.dumps({k: v for k, v in obj.items() if not k.startswith("_")})
+    try:
+        return json.dumps(obj)
+    except (TypeError, ValueError):
+        return json.dumps(str(obj))
+
+
+def _summarise_for_llm(result: Any, max_chars: int = 1000) -> Any:
+    if isinstance(result, dict):
+        if "results" in result and isinstance(result["results"], list):
+            truncated = []
+            for r in result["results"][:2]:
+                r_copy = dict(r)
+                if "chunk_text" in r_copy:
+                    r_copy["chunk_text"] = r_copy["chunk_text"][:300]
+                truncated.append(r_copy)
+            return {"results": truncated, "total": len(result["results"])}
+        return {k: _summarise_for_llm(v, max_chars) for k, v in result.items()}
+    if isinstance(result, str) and len(result) > max_chars:
+        return result[:max_chars]
+    return result
+
+
 # ======================================================================
 # 1. GUARDRAIL + CLASSIFIER
 # ======================================================================
@@ -29,8 +68,6 @@ async def guardrail_classifier(
     state: AgentState,
     runtime: Runtime[Context],
 ) -> dict[str, Any]:
-    """Safety check + ticket classification via DSPy TriageProgram."""
-
     triage_program = runtime.context.triage_program
     run_id = state.get("run_id", "")
 
@@ -51,18 +88,20 @@ async def guardrail_classifier(
         log_event("ERROR", "Triage program failed", run_id=run_id)
         raise
 
+    classification = _prediction_to_dict(result)
+
     log_event(
         "INFO",
         "Triage completed",
         run_id=run_id,
-        safety=result.get("safety", "UNKNOWN"),
-        intent=result.get("intent", "unknown"),
+        safety=classification.get("safety", "UNKNOWN"),
+        intent=classification.get("intent", "unknown"),
     )
 
-    if result.get("safety") == "UNSAFE":
+    if classification.get("safety") == "UNSAFE":
         return {
             "guardrail_rejected": True,
-            "classification": result,
+            "classification": classification,
             "final_response": (
                 "Your message has been flagged for review. A human agent will respond shortly."
             ),
@@ -71,7 +110,7 @@ async def guardrail_classifier(
 
     return {
         "guardrail_rejected": False,
-        "classification": result,
+        "classification": classification,
     }
 
 
@@ -82,8 +121,6 @@ async def context_gatherer(
     state: AgentState,
     runtime: Runtime[Context],
 ) -> dict[str, Any]:
-    """Fetch customer profile and recent orders via MCP tools in parallel."""
-
     mcp_client = runtime.context.mcp_client
     run_id = state.get("run_id", "")
 
@@ -135,8 +172,6 @@ You have access to these tools:
 - issue_wallet_credit(user_id, amount, reason) - issue store credit (max Rs.500)
 - schedule_return_pickup(order_id, pickup_date) - schedule a return pickup
 - create_ticket(user_id, query_text, classification, priority, assigned_team) - create a support ticket
-- escalate_to_human(ticket_id) - escalate a ticket to a human agent
-- route_to_team(ticket_id, team) - assign a ticket to a specific team
 
 Rules:
 1. Gather information step by step. Never jump to conclusions.
@@ -152,15 +187,13 @@ Respond in JSON:
 - If you have enough information to respond: {"action": "final_answer", "response": "<message to customer>"}
 """
 
-MAX_RESOLVER_STEPS = 5
+MAX_RESOLVER_STEPS = 3
 
 
 async def agentic_resolver(
     state: AgentState,
     runtime: Runtime[Context],
 ) -> dict[str, Any]:
-    """Agentic loop that resolves tickets by calling tools dynamically."""
-
     resolver_lm = runtime.context.resolver_lm
     mcp_client = runtime.context.mcp_client
     run_id = state.get("run_id", "")
@@ -177,10 +210,13 @@ async def agentic_resolver(
         {"role": "system", "content": RESOLVER_SYSTEM_PROMPT},
         {
             "role": "user",
-            "content": f"""Customer: {customer.get("full_name", "Unknown")} ({customer.get("segment", "unknown")})
-Query: {query}
-Classification: {json.dumps(classification)}
-Recent orders: {json.dumps(orders[:3]) if orders else "None"}""",
+            "content": (
+                f"Customer: {customer.get('full_name', 'Unknown')} "
+                f"({customer.get('segment', 'unknown')})\n"
+                f"Query: {query}\n"
+                f"Classification: {_safe_json_dumps(classification)}\n"
+                f"Recent orders: {_safe_json_dumps(orders[:3]) if orders else 'None'}"
+            ),
         },
     ]
 
@@ -227,7 +263,6 @@ Recent orders: {json.dumps(orders[:3]) if orders else "None"}""",
                 "tool_results": tool_results,
             }
 
-        # Tool call
         tool_name = result.get("tool")
         tool_args = result.get("args", {})
 
@@ -263,7 +298,15 @@ Recent orders: {json.dumps(orders[:3]) if orders else "None"}""",
             }
         else:
             try:
-                tool_output = await mcp_client.call_tool(tool_name, tool_args, run_id=run_id)
+                clean_args = {}
+                for k, v in tool_args.items():
+                    if isinstance(v, dict):
+                        clean_args[k] = {
+                            kk: vv for kk, vv in v.items() if not str(kk).startswith("_")
+                        }
+                    else:
+                        clean_args[k] = v
+                tool_output = await mcp_client.call_tool(tool_name, clean_args, run_id=run_id)
             except Exception as exc:
                 tool_output = {"error": str(exc)}
                 log_event(
@@ -276,10 +319,20 @@ Recent orders: {json.dumps(orders[:3]) if orders else "None"}""",
 
         tool_results.append({"tool": tool_name, "args": tool_args, "result": tool_output})
         messages.append({"role": "assistant", "content": json.dumps(result)})
-        messages.append({"role": "user", "content": f"Tool result: {json.dumps(tool_output)}"})
+        tool_summary = _summarise_for_llm(tool_output)
+        messages.append(
+            {
+                "role": "user",
+                "content": f"Tool result: {_safe_json_dumps(tool_summary)}",
+            }
+        )
 
-    # Max steps reached - force final answer
-    messages.append({"role": "user", "content": "Please give a final answer to the customer now."})
+    messages.append(
+        {
+            "role": "user",
+            "content": "Please give a final answer to the customer now.",
+        }
+    )
     raw = await resolver_lm.acall(messages=messages)
     raw_text = raw[0] if isinstance(raw, list) else raw
     final_response = raw_text if isinstance(raw_text, str) else str(raw_text)
@@ -313,8 +366,6 @@ async def human_escalate(
     state: AgentState,
     runtime: Runtime[Context],
 ) -> dict[str, Any]:
-    """Create a ticket, escalate, and route to the correct team."""
-
     mcp_client = runtime.context.mcp_client
     run_id = state.get("run_id", "")
 
@@ -336,26 +387,22 @@ async def human_escalate(
             {
                 "user_id": state.get("user_id", "unknown"),
                 "query_text": state["query_text"],
-                "classification": classification,
+                "classification": _prediction_to_dict(classification),
                 "priority": priority,
                 "assigned_team": team,
             },
             run_id=run_id,
         )
-        await mcp_client.call_tool("escalate_to_human", {"ticket_id": ticket_id}, run_id=run_id)
-        await mcp_client.call_tool(
-            "route_to_team", {"ticket_id": ticket_id, "team": team}, run_id=run_id
-        )
         log_event(
             "INFO",
-            "Ticket created and escalated",
+            "Ticket created",
             run_id=run_id,
             ticket_id=ticket_id,
             priority=priority,
             team=team,
         )
     except Exception:
-        log_event("ERROR", "Failed to create/escalate ticket", run_id=run_id)
+        log_event("ERROR", "Failed to create ticket", run_id=run_id)
         ticket_id = "unknown"
 
     response = (

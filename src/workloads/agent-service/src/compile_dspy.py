@@ -16,6 +16,33 @@ log = logging.getLogger(__name__)
 COMPILED_PATH = Path("compiled/triage_program.json")
 
 
+class TriageSignature(dspy.Signature):
+    """Classify a customer message for safety, intent, urgency, sentiment, and auto-resolvability."""
+
+    query: str = dspy.InputField()
+    safety: str = dspy.OutputField(desc="SAFE or UNSAFE")
+    intent: str = dspy.OutputField()
+    urgency: int = dspy.OutputField(desc="1-10")
+    sentiment: str = dspy.OutputField(desc="angry, frustrated, confused, neutral, satisfied")
+    auto_resolvable: bool = dspy.OutputField()
+
+
+class TriageProgram(dspy.Module):
+    def __init__(self):
+        super().__init__()
+        self.classify = dspy.ChainOfThought(TriageSignature)
+
+    def forward(self, query: str):
+        result = self.classify(query=query)
+        return dspy.Prediction(
+            safety=result.safety,
+            intent=result.intent,
+            urgency=int(result.urgency),
+            sentiment=result.sentiment,
+            auto_resolvable=bool(result.auto_resolvable),
+        )
+
+
 def load_or_compile_triage(lm=None) -> dspy.Module:
     """Load the precompiled TriageProgram from JSON.
 
@@ -35,6 +62,6 @@ def load_or_compile_triage(lm=None) -> dspy.Module:
         )
 
     log.info("Loading precompiled triage program from %s", COMPILED_PATH)
-    program = dspy.Module()
+    program = TriageProgram()
     program.load(str(COMPILED_PATH))
     return program

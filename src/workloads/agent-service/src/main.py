@@ -12,8 +12,9 @@ import os
 import sys
 from contextlib import asynccontextmanager
 
+import dspy
 from compile_dspy import load_or_compile_triage
-from config import create_resolver_lm, settings
+from config import create_resolver_lm, create_safeguard_lm, settings
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from graph import compile_graph
@@ -31,7 +32,6 @@ logging.basicConfig(
 )
 log = logging.getLogger("agent-service")
 
-# Silence noisy third-party loggers
 for noisy in (
     "uvicorn.access",
     "uvicorn",
@@ -51,21 +51,21 @@ async def lifespan(app: FastAPI):
 
     triage_program = load_or_compile_triage()
     app.state.triage_program = triage_program
-    log_event("INFO", "Triage program loaded")
+
+    runtime_lm = create_safeguard_lm()
+    dspy.configure(lm=runtime_lm)
+    log_event("INFO", "Triage program loaded and DSPy configured")
 
     app.state.mcp_client = MCPClientManager()
     await app.state.mcp_client.connect()
 
-    # Pre-warm policy search cache (async)
     try:
         await warmup_policy_cache()
         log_event("INFO", "Policy search cache warmed")
     except Exception:
         log_event("WARN", "Policy search cache warmup failed - will retry on first request")
 
-    async with AsyncPostgresSaver.from_conn_string(
-        settings.database_url.replace("postgresql://", "postgresql+asyncpg://")
-    ) as checkpointer:
+    async with AsyncPostgresSaver.from_conn_string(settings.database_url) as checkpointer:
         await checkpointer.setup()
         app.state.graph = await compile_graph(checkpointer=checkpointer)
         log_event("INFO", "LangGraph compiled")

@@ -19,15 +19,14 @@ class Settings(BaseSettings):
     )
 
     # -- LLM --------------------------------------------------------
-    llm_api_key: str = ""  # Groq API key
-    llm_safeguard_model: str = "groq/openai/gpt-oss-safeguard-20b"
-    llm_resolver_model: str = "groq/qwen-qwen3-32b"
+    llm_safeguard_model: str = "bedrock/meta.llama3-8b-instruct-v1:0"
+    llm_resolver_model: str = "bedrock/meta.llama3-8b-instruct-v1:0"
 
     llm_safeguard_temperature: float = 0.0
     llm_safeguard_max_tokens: int = 1024
 
     llm_resolver_temperature: float = 0.2
-    llm_resolver_max_tokens: int = 4096
+    llm_resolver_max_tokens: int = 2048
 
     # -- Agent behaviour --------------------------------------------
     urgency_escalate_threshold: int = 8
@@ -46,7 +45,7 @@ class Settings(BaseSettings):
     bedrock_region: str = "ap-south-1"
     bedrock_embed_model: str = "amazon.titan-embed-text-v2:0"
     aws_region: str = "ap-south-1"
-    embeddings_bucket: str = "agentops-staging-embeddings-bucket"
+    embeddings_bucket: str = "agentops-embeddings-temp-xyz"
     embeddings_key: str = "embeddings.json"
 
     # -- Server -----------------------------------------------------
@@ -61,20 +60,16 @@ settings = Settings()
 
 
 def create_safeguard_lm() -> dspy.LM:
-    """LM for guardrail + classification (GPT-OSS-Safeguard 20B)."""
     return dspy.LM(
         model=settings.llm_safeguard_model,
-        api_key=settings.llm_api_key,
         temperature=settings.llm_safeguard_temperature,
         max_tokens=settings.llm_safeguard_max_tokens,
     )
 
 
 def create_resolver_lm() -> dspy.LM:
-    """LM for the agentic resolver (Qwen3 32B)."""
     return dspy.LM(
         model=settings.llm_resolver_model,
-        api_key=settings.llm_api_key,
         temperature=settings.llm_resolver_temperature,
         max_tokens=settings.llm_resolver_max_tokens,
     )
