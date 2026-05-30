@@ -6,42 +6,50 @@
       {
         "augmented": true,
         "query": "I ordered an iPhone 16 Pro Max worth Rs 1.4 lakh paid by COD but you sent me a charger instead. I want my money back immediately. This is fraud.",
-        "reasoning": "The customer reports receiving an incorrect item (a charger instead of an iPhone 16 Pro Max) and demands an immediate refund, labeling the situation as fraud. This is a complaint about a wrong item delivered and a request for a refund, which is not automatically resolvable through standard self‑service. The tone is angry and the issue is urgent.",
+        "reasoning": "The customer claims to have received a charger instead of the iPhone 16 Pro Max, worth Rs 1.4 lakh, and is demanding an immediate refund, accusing the company of fraud.",
         "safety": "SAFE",
         "intent": "wrong_item_delivered",
-        "urgency": 9,
+        "urgency": 10,
         "sentiment": "angry",
-        "auto_resolvable": false
+        "auto_resolvable": false,
+        "required_action": "investigate_the_issue_and_take_appropriate_action",
+        "required_tool": "investigation_and_resolution"
       },
       {
         "augmented": true,
         "query": "My order KST-DEL-004 was delivered 2 days ago but the box had a cheap charger not the Samsung phone I ordered. I paid COD. How do I get refund?",
-        "reasoning": "The customer reports receiving an incorrect item (a cheap charger instead of a Samsung phone) after delivery. This is a product discrepancy issue that requires investigation and resolution by the support team. The situation is likely to be urgent and the customer is frustrated.",
-        "safety": "SAFE",
-        "intent": "wrong_item_delivered",
-        "urgency": 7,
-        "sentiment": "frustrated",
-        "auto_resolvable": false
-      },
-      {
-        "augmented": true,
-        "query": "I ordered boat earbuds but got some random cable instead. Order value 2499 UPI. What do I do?",
-        "reasoning": "The customer reports receiving an incorrect item (a random cable instead of the ordered Boat earbuds). This is a product mismatch issue, which falls under an order issue or wrong item received. The user is asking for guidance on what to do next, indicating a need for support. The tone is frustrated due to the mistake. The issue is not automatically resolvable by the system alone; it requires manual intervention (e.g., contacting customer support, initiating a return or replacement). Therefore, the intent is classified as “wrong_item_received”, urgency is high (8), sentiment is frustrated, and auto_resolvable is False.",
-        "safety": "SAFE",
-        "intent": "wrong_item_received",
-        "urgency": 8,
-        "sentiment": "frustrated",
-        "auto_resolvable": false
-      },
-      {
-        "augmented": true,
-        "query": "Shoes delivered but box had sandals inside. Wrong product. COD payment 8995. Need refund.",
-        "reasoning": "The customer reports receiving the wrong product (sandals instead of shoes) and requests a refund. This is a standard post‑purchase issue that can be handled by the customer service team through a return and refund process. No safety concerns are present, and the issue is not urgent beyond a normal complaint resolution timeframe.",
+        "reasoning": "The customer received a wrong item in their order, a cheap charger instead of the Samsung phone they paid for, and they paid COD.",
         "safety": "SAFE",
         "intent": "wrong_item_delivered",
         "urgency": 6,
         "sentiment": "frustrated",
-        "auto_resolvable": true
+        "auto_resolvable": true,
+        "required_action": "check_refund_eligibility and schedule return pickup",
+        "required_tool": "check_refund_eligibility and schedule return pickup"
+      },
+      {
+        "augmented": true,
+        "query": "I ordered boat earbuds but got some random cable instead. Order value 2499 UPI. What do I do?",
+        "reasoning": "The customer received an incorrect item in their order, a random cable instead of the Boat earbuds, and is seeking assistance to resolve the issue.",
+        "safety": "SAFE",
+        "intent": "incorrect_item",
+        "urgency": 8,
+        "sentiment": "frustrated",
+        "auto_resolvable": true,
+        "required_action": "schedule_return_pickup",
+        "required_tool": "schedule_return_pickup"
+      },
+      {
+        "augmented": true,
+        "query": "Shoes delivered but box had sandals inside. Wrong product. COD payment 8995. Need refund.",
+        "reasoning": "The customer received a wrong product, sandals instead of shoes, and is requesting a refund.",
+        "safety": "SAFE",
+        "intent": "wrong_item_delivered",
+        "urgency": 6,
+        "sentiment": "frustrated",
+        "auto_resolvable": true,
+        "required_action": "check_refund_eligibility and schedule return pickup",
+        "required_tool": "check_refund_eligibility and schedule return pickup"
       },
       {
         "query": "My phone number changed and I can't update it in my profile. Need help to change mobile number.",
@@ -49,7 +57,9 @@
         "intent": "account_issue",
         "urgency": 4,
         "sentiment": "neutral",
-        "auto_resolvable": true
+        "auto_resolvable": true,
+        "required_action": "",
+        "required_tool": ""
       },
       {
         "query": "What payment methods do you accept? Is UPI available for all orders?",
@@ -57,7 +67,9 @@
         "intent": "general_inquiry",
         "urgency": 1,
         "sentiment": "neutral",
-        "auto_resolvable": true
+        "auto_resolvable": true,
+        "required_action": "",
+        "required_tool": ""
       },
       {
         "query": "I forgot my password and the reset email never arrives. Checked spam folder too.",
@@ -65,7 +77,9 @@
         "intent": "account_issue",
         "urgency": 4,
         "sentiment": "frustrated",
-        "auto_resolvable": true
+        "auto_resolvable": true,
+        "required_action": "",
+        "required_tool": ""
       },
       {
         "query": "I bought a Levi's jeans 25 days back. Never wore it, tags still on. Can I still return?",
@@ -73,7 +87,9 @@
         "intent": "return_request",
         "urgency": 3,
         "sentiment": "neutral",
-        "auto_resolvable": true
+        "auto_resolvable": true,
+        "required_action": "check_refund_eligibility",
+        "required_tool": "check_refund_eligibility"
       },
       {
         "query": "Mujhe apna order cancel karna hai. Kal kiya tha order. Please help. Hinglish mein baat kar raha hoon.",
@@ -81,7 +97,9 @@
         "intent": "cancellation_request",
         "urgency": 3,
         "sentiment": "neutral",
-        "auto_resolvable": true
+        "auto_resolvable": true,
+        "required_action": "check_refund_eligibility",
+        "required_tool": "check_refund_eligibility"
       },
       {
         "query": "Someone hacked my Kestral account and placed an order worth Rs 50000. I didn't authorize this.",
@@ -89,7 +107,9 @@
         "intent": "account_issue",
         "urgency": 10,
         "sentiment": "angry",
-        "auto_resolvable": false
+        "auto_resolvable": false,
+        "required_action": "",
+        "required_tool": ""
       },
       {
         "query": "Mattress order placed yesterday. Not shipped yet. Need to cancel.",
@@ -97,7 +117,9 @@
         "intent": "cancellation_request",
         "urgency": 3,
         "sentiment": "neutral",
-        "auto_resolvable": true
+        "auto_resolvable": true,
+        "required_action": "check_refund_eligibility",
+        "required_tool": "check_refund_eligibility"
       },
       {
         "query": "I have been calling support for 5 days about a refund that never came. Everyone says they will check and never call back. Who can I escalate to?",
@@ -105,7 +127,9 @@
         "intent": "complaint",
         "urgency": 9,
         "sentiment": "angry",
-        "auto_resolvable": false
+        "auto_resolvable": false,
+        "required_action": "",
+        "required_tool": ""
       },
       {
         "query": "Third time receiving wrong product from Kestral. This is a pattern. I want this escalated to senior management.",
@@ -113,7 +137,9 @@
         "intent": "complaint",
         "urgency": 9,
         "sentiment": "angry",
-        "auto_resolvable": false
+        "auto_resolvable": false,
+        "required_action": "",
+        "required_tool": ""
       },
       {
         "query": "Phone screen cracked on delivery. Unboxing video recorded. Need replacement.",
@@ -121,7 +147,9 @@
         "intent": "damaged_product",
         "urgency": 8,
         "sentiment": "frustrated",
-        "auto_resolvable": false
+        "auto_resolvable": false,
+        "required_action": "schedule_return_pickup",
+        "required_tool": "schedule_return_pickup"
       },
       {
         "query": "TV delivered with a big scratch on the screen. Box looked fine from outside.",
@@ -129,7 +157,9 @@
         "intent": "damaged_product",
         "urgency": 9,
         "sentiment": "angry",
-        "auto_resolvable": false
+        "auto_resolvable": false,
+        "required_action": "schedule_return_pickup",
+        "required_tool": "schedule_return_pickup"
       },
       {
         "query": "EMI transaction failed but money debited. Order shows payment pending. What happens to my money?",
@@ -137,11 +167,13 @@
         "intent": "payment_issue",
         "urgency": 7,
         "sentiment": "frustrated",
-        "auto_resolvable": false
+        "auto_resolvable": false,
+        "required_action": "",
+        "required_tool": ""
       }
     ],
     "signature": {
-      "instructions": "Classify a customer message for safety, intent, urgency, sentiment, and auto-resolvability.",
+      "instructions": "Classify a customer message for safety, intent, urgency, sentiment,\nauto-resolvability, and the required tool/action if any.",
       "fields": [
         {
           "prefix": "Query:",
@@ -170,6 +202,14 @@
         {
           "prefix": "Auto Resolvable:",
           "description": "${auto_resolvable}"
+        },
+        {
+          "prefix": "Required Action:",
+          "description": "Short description of the required action, or empty string"
+        },
+        {
+          "prefix": "Required Tool:",
+          "description": "MCP tool name to call, or empty string"
         }
       ]
     },

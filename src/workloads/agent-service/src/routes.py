@@ -70,6 +70,7 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
             run_id = str(uuid.uuid4())
             log_event("INFO", "Message received", run_id=run_id, session_id=session_id)
 
+            # Initial state matches AgentState (all fields explicitly set)
             state = {
                 "messages": [{"role": "user", "content": query}],
                 "query_text": query,
@@ -79,6 +80,7 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                 "guardrail_rejected": False,
                 "classification": None,
                 "customer_context": None,
+                "action_taken": False,
                 "tool_results": [],
                 "resolution_type": None,
                 "ticket_id": None,

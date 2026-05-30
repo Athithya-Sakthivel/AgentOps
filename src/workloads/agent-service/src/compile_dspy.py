@@ -17,7 +17,8 @@ COMPILED_PATH = Path("compiled/triage_program.json")
 
 
 class TriageSignature(dspy.Signature):
-    """Classify a customer message for safety, intent, urgency, sentiment, and auto-resolvability."""
+    """Classify a customer message for safety, intent, urgency, sentiment,
+    auto-resolvability, and the required tool/action if any."""
 
     query: str = dspy.InputField()
     safety: str = dspy.OutputField(desc="SAFE or UNSAFE")
@@ -25,6 +26,10 @@ class TriageSignature(dspy.Signature):
     urgency: int = dspy.OutputField(desc="1-10")
     sentiment: str = dspy.OutputField(desc="angry, frustrated, confused, neutral, satisfied")
     auto_resolvable: bool = dspy.OutputField()
+    required_action: str = dspy.OutputField(
+        desc="Short description of the required action, or empty string"
+    )
+    required_tool: str = dspy.OutputField(desc="MCP tool name to call, or empty string")
 
 
 class TriageProgram(dspy.Module):
@@ -40,6 +45,8 @@ class TriageProgram(dspy.Module):
             urgency=int(result.urgency),
             sentiment=result.sentiment,
             auto_resolvable=bool(result.auto_resolvable),
+            required_action=getattr(result, "required_action", "") or "",
+            required_tool=getattr(result, "required_tool", "") or "",
         )
 
 
