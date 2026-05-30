@@ -52,3 +52,5 @@ provider "cloudflare" {
   # api_key = var.cloudflare_api_key
   # api_token = var.cloudflare_api_token
 }
+
+

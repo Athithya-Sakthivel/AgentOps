@@ -18,3 +18,14 @@ tags = {
   Project = "agentops"
   Stack   = "prod"
 }
+
+bucket_name = "agentops-prod-embeddings-bucket"
+
+# ECR repositories (lowercase with hyphens - best practice)
+agent_repository_name = "agentops-prod-agent-service"
+mcp_repository_name   = "agentops-prod-mcp-server"
+
+# GitHub repository (exact case as on GitHub)
+github_repository = "Athithya-Sakthivel/AgentOps"
+
+force_destroy = false # production must NOT destroy non‑empty bucket and ECR repos

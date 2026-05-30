@@ -18,3 +18,15 @@ tags = {
   Project = "agentops"
   Stack   = "staging"
 }
+
+bucket_name = "agentops-staging-embeddings-bucket"
+
+# ECR repositories (lowercase with hyphens - best practice)
+agent_repository_name = "agentops-staging-agent-service"
+mcp_repository_name   = "agentops-staging-mcp-server"
+
+# GitHub repository (exact case as on GitHub)
+github_repository = "Athithya-Sakthivel/AgentOps"
+
+
+force_destroy = true # ECR and S3 force_delete will also be true (same variable)
