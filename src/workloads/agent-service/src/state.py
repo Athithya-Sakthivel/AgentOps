@@ -24,6 +24,8 @@ class AgentState(MessagesState):
 
     customer_context: dict[str, Any] | None
 
+    action_taken: bool  # set by action_dispatcher when a deterministic tool call succeeds
+
     tool_results: list[dict[str, Any]]
     resolution_type: str | None
     ticket_id: str | None
@@ -53,3 +55,13 @@ def route_after_guardrail(state: AgentState) -> str:
         return "human_escalate"
 
     return "context_gatherer"
+
+
+def route_after_dispatcher(state: AgentState) -> str:
+    """
+    After action_dispatcher, either go to response_formatter (if a direct
+    action was taken) or fall back to the LLM-driven agentic_resolver.
+    """
+    if state.get("action_taken", False):
+        return "response_formatter"
+    return "agentic_resolver"
