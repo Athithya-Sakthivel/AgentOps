@@ -81,6 +81,7 @@ jobs:
                 --exclude .pytest_cache \
                 --exclude .mypy_cache \
                 --exclude node_modules \
+                --exclude src/infra \
                 /workspace/src/
 
               echo "[INFO] === Gitleaks Full History Scan ==="

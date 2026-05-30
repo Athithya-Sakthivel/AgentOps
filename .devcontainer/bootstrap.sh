@@ -13,7 +13,7 @@ unzip -q /tmp/awscliv2.zip -d /tmp/awscli
 sudo /tmp/awscli/aws/install --update
 rm -rf /tmp/awscliv2.zip /tmp/awscli
 
-# OpenTofu latest(tofu commands never change)
+# OpenTofu latest(tofu commands rarely change)
 curl -fsSL https://get.opentofu.org/install-opentofu.sh | sh -s -- --install-method deb
 
 # Python tooling pinned to current stable releases

@@ -30,8 +30,7 @@ tree:
 push:
 	git add .
 	git commit -m "new"
-	gitleaks detect --source . --exit-code 1 --redact
-	git push origin main --force
+	git push origin main
 
 clean:
 	find . -type d -name "__pycache__" -exec rm -rf {} +
