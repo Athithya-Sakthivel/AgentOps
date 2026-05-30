@@ -1,5 +1,8 @@
 """
 MCP client wrapper using langchain-mcp-adapters.
+
+All tool results are normalised to plain Python types (str, dict, list of dicts)
+before being returned to the caller.  No LangChain wrappers escape.
 """
 
 from __future__ import annotations
@@ -14,17 +17,43 @@ log = logging.getLogger("agent-service")
 
 
 def _normalise_tool_result(result: Any) -> Any:
-    """Extract plain value from LangChain ToolMessage / MCP content."""
+    """
+    Convert any LangChain / MCP wrapper into a plain Python value.
+
+    Handles:
+    - ToolMessage objects (with a .content attribute)
+    - Plain lists of {"type":"text","text":"..."} dicts
+    - Already-plain strings / dicts / lists
+    """
+
+    # ── 1.  ToolMessage (has .content) ──────────────────────────────
     if hasattr(result, "content"):
         content = result.content
+        # content can be a list of blocks or a string
         if isinstance(content, list) and len(content) > 0:
-            first = content[0]
-            if isinstance(first, dict) and "text" in first:
-                return first["text"]
-            if isinstance(first, str):
-                return first
-            return str(first)
-        return content
+            return _normalise_tool_result(content)  # recurse
+        if isinstance(content, str):
+            return content
+        # fallback just stringify
+        return str(content)
+
+    # ── 2.  List of MCP content blocks ─────────────────────────────
+    if isinstance(result, list):
+        if len(result) == 0:
+            return ""
+        # If the list contains a single dict with a "text" key, return that text
+        if len(result) == 1 and isinstance(result[0], dict) and "text" in result[0]:
+            return result[0]["text"]
+        # Multiple items return a list of extracted text values
+        extracted = []
+        for item in result:
+            if isinstance(item, dict) and "text" in item:
+                extracted.append(item["text"])
+            else:
+                extracted.append(item)
+        return extracted
+
+    # ── 3.  Already a plain value ──────────────────────────────────
     return result
 
 
@@ -58,7 +87,7 @@ class MCPClientManager:
         self._tools.clear()
 
     async def call_tool(self, name: str, arguments: dict[str, Any], run_id: str = "") -> Any:
-        """Call a tool by name, injecting run_id into arguments."""
+        """Call a tool by name, injecting run_id, and return a normalised result."""
         if not self._client:
             raise RuntimeError("MCP client not connected")
         if name not in self._tools:

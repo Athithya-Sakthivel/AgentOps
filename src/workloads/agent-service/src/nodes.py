@@ -119,13 +119,18 @@ def _unwrap_nested_json(text: str) -> str:
     if not isinstance(text, str):
         return str(text)
     stripped = text.strip()
-    if stripped.startswith("{") and '"action"' in stripped:
-        try:
-            inner = json.loads(stripped)
-            if isinstance(inner, dict) and "response" in inner:
-                return inner["response"]
-        except (json.JSONDecodeError, KeyError):
-            pass
+    # Try to find JSON block anywhere in the text
+    if '"action"' in stripped:
+        # Extract the JSON object
+        start = stripped.find("{")
+        end = stripped.rfind("}") + 1
+        if start >= 0 and end > start:
+            try:
+                inner = json.loads(stripped[start:end])
+                if isinstance(inner, dict) and "response" in inner:
+                    return inner["response"]
+            except (json.JSONDecodeError, KeyError):
+                pass
     return text
 
 
