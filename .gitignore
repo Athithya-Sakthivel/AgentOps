@@ -224,3 +224,4 @@ src/infra/.plans
 src/infra/.backend
 src/infra/.terraform
 src/infra/terraform.tfstate
+postgres

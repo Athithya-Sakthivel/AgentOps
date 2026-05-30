@@ -421,7 +421,9 @@ async def seed(engine, session_factory):
             Product.__table__,
             User.__table__,
         ):
-            await conn.execute(text(f"DROP TABLE IF EXISTS {table.name} CASCADE"))
+            await conn.execute(
+                text("DROP TABLE IF EXISTS :table_name CASCADE"), {"table_name": table.name}
+            )
 
     print("Creating tables...")
     async with engine.begin() as conn:
