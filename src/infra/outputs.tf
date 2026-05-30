@@ -41,3 +41,7 @@ output "mcp_repository_arn" {
 output "github_agent_role_arn" {
   value = module.github_iam.github_role_arns["agent"]
 }
+
+output "github_mcp_role_arn" {
+  value = module.github_iam.github_role_arns["mcp"]
+}
