@@ -120,11 +120,20 @@ INTENT_TO_ACTION = {
         "args_template": {"amount": 100, "reason": "delivery delay compensation"},
         "max_amount": 500,
     },
+    "delayed_delivery": {  # <-- ADD
+        "tool": "issue_wallet_credit",
+        "args_template": {"amount": 100, "reason": "delivery delay compensation"},
+        "max_amount": 500,
+    },
     "return_request": {
         "tool": "check_refund_eligibility",
         "pre_check": True,
     },
     "refund_status": {
+        "tool": "check_refund_eligibility",
+        "pre_check": True,
+    },
+    "refund_query": {  # <-- ADD
         "tool": "check_refund_eligibility",
         "pre_check": True,
     },
@@ -329,6 +338,8 @@ Decision tree (follow in order):
 4. If the customer reports a damaged product -> call schedule_return_pickup
 5. If the customer needs policy information -> call search_policies
 6. ONLY if none of the above apply -> provide a text response
+
+When the customer does not specify an order ID, use the most recent order from the "Recent orders" list.
 
 Rules:
 - Never respond with text alone when a tool is available.

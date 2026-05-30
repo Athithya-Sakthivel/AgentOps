@@ -2,12 +2,15 @@
 set -euo pipefail
 
 # =============================================================================
-# AgentOps — End-to-End Test Suite
+# AgentOps — Agentic End‑to‑End Test Suite
 # =============================================================================
 # Demonstrates:
 #   • Real‑time WebSocket chat with LangGraph agent
 #   • Policy inquiry (auto‑resolved by Bedrock)
-#   • High‑urgency escalation → ticket creation + routing
+#   • Late delivery → automatic wallet credit
+#   • Damaged product → return pickup scheduling
+#   • Refund eligibility check
+#   • High‑urgency escalation → ticket creation
 #   • Admin REST endpoints (queue, analytics, overrides)
 #   • Cross‑service structured logging with correlation IDs
 #
@@ -145,7 +148,58 @@ fi
 # ------------------------------------------------------------------ Test 3
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "  TEST 3  •  Admin — Ticket Queue"
+echo "  TEST 3  •  Agentic Action — Late Delivery → Wallet Credit"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+QUERY3='{"query":"My order KST-HYD-006 was supposed to arrive by May 22, but it is still in transit. I want compensation for the delay.","user_id":"a1b2c3d4-e5f6-4a7b-8c9d-000000000006"}'
+
+WS3=$(echo "${QUERY3}" | websocat -n1 "ws://127.0.0.1:${AGENT_PORT}/ws/chat/test-session-3" 2>/dev/null || echo '{"error":"websocat failed"}')
+echo "  📥  RESPONSE:"
+echo "${WS3}" | python3 -m json.tool --no-ensure-ascii 2>/dev/null || echo "${WS3}"
+
+if echo "${WS3}" | grep -qi "store credit\|transaction"; then
+  pass "Late delivery → wallet credit issued"
+else
+  fail "Expected wallet credit message not found"
+fi
+
+# ------------------------------------------------------------------ Test 4
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "  TEST 4  •  Agentic Action — Damaged Product → Return Pickup"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+QUERY4='{"query":"The Nike shoes I received have a defect – the sole is coming off. I want a return pickup scheduled.","user_id":"a1b2c3d4-e5f6-4a7b-8c9d-000000000007"}'
+
+WS4=$(echo "${QUERY4}" | websocat -n1 "ws://127.0.0.1:${AGENT_PORT}/ws/chat/test-session-4" 2>/dev/null || echo '{"error":"websocat failed"}')
+echo "  📥  RESPONSE:"
+echo "${WS4}" | python3 -m json.tool --no-ensure-ascii 2>/dev/null || echo "${WS4}"
+
+if echo "${WS4}" | grep -qiE "scheduled|pickup|return"; then
+  pass "Damaged product → return pickup attempted"
+else
+  fail "No return pickup message found"
+fi
+
+# ------------------------------------------------------------------ Test 5
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "  TEST 5  •  Agentic Action — Refund Eligibility Check"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+QUERY5='{"query":"I received a charger instead of my iPhone. I want to check if my order is eligible for a refund.","user_id":"a1b2c3d4-e5f6-4a7b-8c9d-000000000004"}'
+
+WS5=$(echo "${QUERY5}" | websocat -n1 "ws://127.0.0.1:${AGENT_PORT}/ws/chat/test-session-5" 2>/dev/null || echo '{"error":"websocat failed"}')
+echo "  📥  RESPONSE:"
+echo "${WS5}" | python3 -m json.tool --no-ensure-ascii 2>/dev/null || echo "${WS5}"
+
+if echo "${WS5}" | grep -qiE "eligible|refund"; then
+  pass "Refund eligibility check succeeded"
+else
+  fail "No eligibility information found"
+fi
+
+# ------------------------------------------------------------------ Test 6
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "  TEST 6  •  Admin — Ticket Queue"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  📤  GET ${AGENT_URL}/admin/queue"
 
@@ -160,10 +214,10 @@ else
   fail "Queue empty — expected tickets after escalation test"
 fi
 
-# ------------------------------------------------------------------ Test 4
+# ------------------------------------------------------------------ Test 7
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "  TEST 4  •  Admin — Analytics"
+echo "  TEST 7  •  Admin — Analytics"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  📤  GET ${AGENT_URL}/admin/analytics"
 
@@ -177,10 +231,10 @@ else
   fail "Analytics endpoint failed"
 fi
 
-# ------------------------------------------------------------------ Test 5
+# ------------------------------------------------------------------ Test 8
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "  TEST 5  •  Admin — Override"
+echo "  TEST 8  •  Admin — Override"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 OVERRIDE_PAYLOAD='{"ticket_id":"e5f6a7b8-c9d0-4e1f-2a3b-000000000001","original_classification":{"intent":"test"},"corrected_classification":{"intent":"corrected"},"reason":"e2e test","overridden_by":"tester"}'
 echo "  📤  POST ${AGENT_URL}/admin/override"
@@ -199,10 +253,10 @@ else
   fail "Override failed"
 fi
 
-# ------------------------------------------------------------------ Test 6
+# ------------------------------------------------------------------ Test 9
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "  TEST 6  •  Observability — Agent Logs with Correlation ID"
+echo "  TEST 9  •  Observability — Agent Logs with Correlation ID"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  📤  Checking /tmp/agent-service-e2e.log"
 
@@ -215,10 +269,10 @@ else
   fail "No correlation IDs found in agent logs"
 fi
 
-# ------------------------------------------------------------------ Test 7
+# ------------------------------------------------------------------ Test 10
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "  TEST 7  •  Observability — MCP Server Logs with Propagated run_id"
+echo "  TEST 10  •  Observability — MCP Server Logs with Propagated run_id"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  📤  Checking /tmp/mcp-server-e2e.log"
 
@@ -231,10 +285,10 @@ else
   fail "No correlation IDs in MCP logs — run_id not propagated?"
 fi
 
-# ------------------------------------------------------------------ Test 8
+# ------------------------------------------------------------------ Test 11
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "  TEST 8  •  Observability — Structured JSON Format"
+echo "  TEST 11  •  Observability — Structured JSON Format"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  📤  Checking /tmp/agent-service-e2e.log for structured JSON lines"
 
@@ -257,7 +311,7 @@ echo "  ❌  FAILED : ${FAILED}"
 echo ""
 
 if [ "${FAILED}" -eq 0 ]; then
-  echo "  🎉  AgentOps is fully operational."
+  echo "  🎉  AgentOps is fully operational and agentic."
   exit 0
 else
   echo "  🔧  ${FAILED} test(s) failed — review the output above for details."

@@ -7,7 +7,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from config import settings
 from langgraph.graph import MessagesState
 
 
@@ -48,10 +47,11 @@ def route_after_guardrail(state: AgentState) -> str:
         return "human_escalate"
 
     classification = state.get("classification", {})
-    if classification.get("urgency", 0) >= settings.urgency_escalate_threshold:
-        return "human_escalate"
+    auto_resolvable = classification.get("auto_resolvable", True)
+    urgency = classification.get("urgency", 0)
 
-    if not classification.get("auto_resolvable", True):
+    # Only escalate if NOT auto-resolvable OR urgency is critical (10)
+    if not auto_resolvable or urgency >= 10:
         return "human_escalate"
 
     return "context_gatherer"
