@@ -1,15 +1,15 @@
-"""Precompile the DSPy triage program
+"""Precompile the DSPy triage program using Bedrock (no rate limits).
+
 Uses BootstrapFewShot on the training set from data/triage_trainset.json.
 The compiled program is saved to compiled/triage_program.json and loaded
 at runtime without any LLM calls.
 
+Usage:
+    python compile_trainset.py
 """
 
 import json
 import logging
-import os
-import sys
-import time
 from pathlib import Path
 
 import dspy
@@ -21,18 +21,14 @@ logging.basicConfig(
 )
 log = logging.getLogger("compile")
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-if not GROQ_API_KEY:
-    log.error("GROQ_API_KEY environment variable is not set")
-    sys.exit(1)
-
 COMPILED_DIR = Path("compiled")
 COMPILED_DIR.mkdir(exist_ok=True)
 TRAINSET_PATH = Path("data/triage_trainset.json")
 
 
 class TriageSignature(dspy.Signature):
-    """Classify a customer message for safety, intent, urgency, sentiment, and auto-resolvability."""
+    """Classify a customer message for safety, intent, urgency, sentiment,
+    auto-resolvability, and the required tool/action if any."""
 
     query: str = dspy.InputField()
     safety: str = dspy.OutputField(desc="SAFE or UNSAFE")
@@ -40,6 +36,10 @@ class TriageSignature(dspy.Signature):
     urgency: int = dspy.OutputField(desc="1-10")
     sentiment: str = dspy.OutputField(desc="angry, frustrated, confused, neutral, satisfied")
     auto_resolvable: bool = dspy.OutputField()
+    required_action: str = dspy.OutputField(
+        desc="Short description of the required action, or empty string"
+    )
+    required_tool: str = dspy.OutputField(desc="MCP tool name to call, or empty string")
 
 
 class TriageProgram(dspy.Module):
@@ -55,11 +55,13 @@ class TriageProgram(dspy.Module):
             urgency=int(result.urgency),
             sentiment=result.sentiment,
             auto_resolvable=bool(result.auto_resolvable),
+            required_action=getattr(result, "required_action", "") or "",
+            required_tool=getattr(result, "required_tool", "") or "",
         )
 
 
 def triage_metric(example, pred, trace=None):
-    """Weighted accuracy metric."""
+    """Weighted accuracy metric for the core fields."""
     score = 0.0
     if pred.safety == example.safety:
         score += 0.3
@@ -74,23 +76,6 @@ def triage_metric(example, pred, trace=None):
     return score
 
 
-# Rate limit wrapper for Groq free tier (8,000 TPM)
-_last_call_time: float = 0.0
-MIN_INTERVAL_SECONDS = 30.0
-
-
-def rate_limited_metric(example, pred, trace=None):
-    """Wrap triage_metric with a 30-second delay between calls."""
-    global _last_call_time
-    elapsed = time.time() - _last_call_time
-    if elapsed < MIN_INTERVAL_SECONDS:
-        wait = MIN_INTERVAL_SECONDS - elapsed
-        log.info("Rate limiting: waiting %.1fs before next example...", wait)
-        time.sleep(wait)
-    _last_call_time = time.time()
-    return triage_metric(example, pred, trace)
-
-
 def main():
     log.info("Loading trainset from %s", TRAINSET_PATH)
     with open(TRAINSET_PATH) as f:
@@ -98,38 +83,35 @@ def main():
 
     trainset = []
     for item in data:
-        trainset.append(
-            dspy.Example(
-                query=item["query"],
-                safety=item["safety"],
-                intent=item["intent"],
-                urgency=item["urgency"],
-                sentiment=item["sentiment"],
-                auto_resolvable=item["auto_resolvable"],
-            ).with_inputs("query")
+        example = dspy.Example(
+            query=item["query"],
+            safety=item["safety"],
+            intent=item["intent"],
+            urgency=item["urgency"],
+            sentiment=item["sentiment"],
+            auto_resolvable=item["auto_resolvable"],
         )
+        # Attach new fields if present, otherwise default
+        example = example.with_inputs("query")
+        example.required_action = item.get("required_action", "")
+        example.required_tool = item.get("required_tool", "")
+        trainset.append(example)
 
     log.info("Loaded %d training examples", len(trainset))
 
-    # GPT-OSS 20B on Groq — free tier with rate limiting
+    # Use Bedrock Llama 3 8B for compilation (same as runtime)
     lm = dspy.LM(
-        "groq/openai/gpt-oss-20b",
-        api_key=GROQ_API_KEY,
+        "bedrock/meta.llama3-8b-instruct-v1:0",
         temperature=0.0,
         max_tokens=2048,
-        num_retries=3,
     )
     dspy.configure(lm=lm)
 
     program = TriageProgram()
 
-    log.info(
-        "Compiling with BootstrapFewShot (rate-limited, ~%d min for %d examples)...",
-        (len(trainset) * MIN_INTERVAL_SECONDS) // 60,
-        len(trainset),
-    )
+    log.info("Compiling with BootstrapFewShot (no rate limits) …")
     optimizer = BootstrapFewShot(
-        metric=rate_limited_metric,
+        metric=triage_metric,
         max_bootstrapped_demos=4,
         max_labeled_demos=16,
         max_errors=10,
