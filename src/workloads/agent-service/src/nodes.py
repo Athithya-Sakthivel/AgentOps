@@ -2,6 +2,14 @@
 LangGraph node implementations - production ready.
 
 All nodes receive Runtime[Context] and use structured logging with run_id.
+
+Includes:
+  - guardrail_classifier   (DSPy triage)
+  - context_gatherer       (customer + order lookup)
+  - action_dispatcher      (deterministic tool-first dispatch)
+  - agentic_resolver       (LLM-driven tool use)
+  - response_formatter     (polished user-facing message)
+  - human_escalate         (ticket creation + routing)
 """
 
 from __future__ import annotations
@@ -10,6 +18,7 @@ import asyncio
 import json
 import logging
 import re
+from datetime import datetime, timedelta
 from typing import Any
 
 from config import settings
@@ -19,6 +28,11 @@ from policy_search import search_policies
 from state import AgentState, Context
 
 log = logging.getLogger("agent-service")
+
+
+# ---------------------------------------------------------------------------
+# helpers
+# ---------------------------------------------------------------------------
 
 
 def _prediction_to_dict(pred: Any) -> dict[str, Any]:
@@ -61,9 +75,73 @@ def _summarise_for_llm(result: Any, max_chars: int = 1000) -> Any:
     return result
 
 
-# ======================================================================
+def _unwrap_nested_json(text: str) -> str:
+    """
+    If the LLM returns a JSON string containing a final_answer,
+    extract the inner response even if the string does not start with '{'.
+    """
+    if not isinstance(text, str):
+        return str(text)
+    stripped = text.strip()
+    # Find the outermost JSON object
+    start = stripped.find("{")
+    end = stripped.rfind("}")
+    if start >= 0 and end > start and '"action"' in stripped:
+        try:
+            inner = json.loads(stripped[start : end + 1])
+            if isinstance(inner, dict) and "response" in inner:
+                return inner["response"]
+        except (json.JSONDecodeError, KeyError):
+            pass
+    return text
+
+
+# ---------------------------------------------------------------------------
+# deterministic action mapping (action_dispatcher)
+# ---------------------------------------------------------------------------
+
+
+def _next_business_day() -> str:
+    """Return the next business day in ISO format."""
+    today = datetime.now()
+    # Monday=0, Sunday=6; skip to Monday if Saturday/Sunday
+    if today.weekday() == 5:  # Saturday
+        today = today + timedelta(days=2)
+    elif today.weekday() == 6:  # Sunday
+        today = today + timedelta(days=1)
+    else:
+        today = today + timedelta(days=1)
+    return today.strftime("%Y-%m-%d")
+
+
+INTENT_TO_ACTION = {
+    "late_delivery": {
+        "tool": "issue_wallet_credit",
+        "args_template": {"amount": 100, "reason": "delivery delay compensation"},
+        "max_amount": 500,
+    },
+    "return_request": {
+        "tool": "check_refund_eligibility",
+        "pre_check": True,
+    },
+    "refund_status": {
+        "tool": "check_refund_eligibility",
+        "pre_check": True,
+    },
+    "cancellation_request": {
+        "tool": "check_refund_eligibility",
+        "pre_check": True,
+    },
+    "damaged_product": {
+        "tool": "schedule_return_pickup",
+        "args_template": {"pickup_date": _next_business_day},
+    },
+}
+
+
+# ---------------------------------------------------------------------------
 # 1. GUARDRAIL + CLASSIFIER
-# ======================================================================
+# ---------------------------------------------------------------------------
 async def guardrail_classifier(
     state: AgentState,
     runtime: Runtime[Context],
@@ -114,29 +192,9 @@ async def guardrail_classifier(
     }
 
 
-def _unwrap_nested_json(text: str) -> str:
-    """If the LLM returns a JSON string containing a final_answer, extract the inner response."""
-    if not isinstance(text, str):
-        return str(text)
-    stripped = text.strip()
-    # Try to find JSON block anywhere in the text
-    if '"action"' in stripped:
-        # Extract the JSON object
-        start = stripped.find("{")
-        end = stripped.rfind("}") + 1
-        if start >= 0 and end > start:
-            try:
-                inner = json.loads(stripped[start:end])
-                if isinstance(inner, dict) and "response" in inner:
-                    return inner["response"]
-            except (json.JSONDecodeError, KeyError):
-                pass
-    return text
-
-
-# ======================================================================
+# ---------------------------------------------------------------------------
 # 2. CONTEXT GATHERER
-# ======================================================================
+# ---------------------------------------------------------------------------
 async def context_gatherer(
     state: AgentState,
     runtime: Runtime[Context],
@@ -181,26 +239,103 @@ async def context_gatherer(
     }
 
 
-# ======================================================================
-# 3. AGENTIC RESOLVER
-# ======================================================================
+# ---------------------------------------------------------------------------
+# 3. ACTION DISPATCHER  (new - deterministic tool-first)
+# ---------------------------------------------------------------------------
+async def action_dispatcher(
+    state: AgentState,
+    runtime: Runtime[Context],
+) -> dict[str, Any]:
+    """
+    If the classification maps to a deterministic action and auto_resolvable
+    is True, call the tool immediately without involving the LLM.
+    """
+    mcp_client = runtime.context.mcp_client
+    run_id = state.get("run_id", "")
+    classification = state.get("classification", {})
+    customer_ctx = state.get("customer_context") or {}
+    customer = customer_ctx.get("customer") or {}
+    intent = classification.get("intent", "")
+
+    log_event("INFO", "Node started", node="action_dispatcher", run_id=run_id, intent=intent)
+
+    # Only act if auto_resolvable and a mapping exists
+    if not classification.get("auto_resolvable", False):
+        log_event("INFO", "Not auto resolvable, deferring to LLM", run_id=run_id)
+        return {"action_taken": False}
+
+    mapping = INTENT_TO_ACTION.get(intent)
+    if not mapping:
+        log_event("INFO", "No deterministic action for intent", run_id=run_id, intent=intent)
+        return {"action_taken": False}
+
+    tool_name = mapping["tool"]
+    args = dict(mapping.get("args_template", {}))
+
+    # Enrich args with state data if possible
+    user_id = state.get("user_id") or customer.get("id")
+    if user_id:
+        args["user_id"] = user_id
+
+    # If we have recent orders, use the latest one for order-related tools
+    orders = customer_ctx.get("orders") or []
+    if orders and "order_id" not in args:
+        latest_order = orders[0]
+        if latest_order and "id" in latest_order:
+            args["order_id"] = latest_order["id"]
+
+    # For pre-check tools (refund eligibility), we need order_id
+    if mapping.get("pre_check") and "order_id" not in args:
+        log_event("WARN", "No order_id for pre-check, skipping", run_id=run_id, tool=tool_name)
+        return {"action_taken": False}
+
+    # Enforce wallet credit limit
+    if tool_name == "issue_wallet_credit":
+        if args.get("amount", 0) > mapping.get("max_amount", settings.max_wallet_credit_amount):
+            args["amount"] = mapping["max_amount"]
+        if "reason" not in args:
+            args["reason"] = "goodwill gesture"
+
+    log_event("INFO", "Executing deterministic action", run_id=run_id, tool=tool_name)
+
+    try:
+        tool_output = await mcp_client.call_tool(tool_name, args, run_id=run_id)
+        return {
+            "action_taken": True,
+            "tool_results": [{"tool": tool_name, "args": args, "result": tool_output}],
+            "classification": classification,
+            "user_id": user_id,
+            "customer_context": state.get("customer_context"),
+        }
+    except Exception as exc:
+        log_event(
+            "ERROR", "Deterministic action failed", run_id=run_id, tool=tool_name, error=str(exc)
+        )
+        # Fall back to LLM resolver
+        return {"action_taken": False}
+
+
+# ---------------------------------------------------------------------------
+# 4. AGENTIC RESOLVER  (rewritten prompt, tool-first mindset)
+# ---------------------------------------------------------------------------
 RESOLVER_SYSTEM_PROMPT = """You are a helpful, empathetic customer service agent for Kestral, an Indian e-commerce company.
 
-You have access to these tools:
-- search_policies(query) - search company policies (returns, refunds, delivery, warranty)
-- check_refund_eligibility(order_id) - check if an order can be refunded
-- issue_wallet_credit(user_id, amount, reason) - issue store credit (max Rs.500)
-- schedule_return_pickup(order_id, pickup_date) - schedule a return pickup
-- create_ticket(user_id, query_text, classification, priority, assigned_team) - create a support ticket
+You MUST resolve issues by taking action, not just providing information.
+
+Decision tree (follow in order):
+1. If the customer reports a late delivery -> IMMEDIATELY call issue_wallet_credit
+2. If the customer wants to return an item -> FIRST call check_refund_eligibility, THEN schedule_return_pickup if eligible
+3. If the customer asks about refund status -> call check_refund_eligibility
+4. If the customer reports a damaged product -> call schedule_return_pickup
+5. If the customer needs policy information -> call search_policies
+6. ONLY if none of the above apply -> provide a text response
 
 Rules:
-1. Gather information step by step. Never jump to conclusions.
-2. Always ground your responses in retrieved policy documents.
-3. Only use issue_wallet_credit for policy-driven compensation (delays, goodwill) and never more than Rs.500.
-4. Only use schedule_return_pickup if the order is eligible for return.
-5. For high-value claims (>Rs.10,000) or security issues, do NOT resolve automatically - create a ticket and escalate.
-6. Use the customer's name when available. Include specific timelines and amounts from policies.
-7. Output your reasoning, then the tool call or final answer.
+- Never respond with text alone when a tool is available.
+- Always confirm tool results to the customer with specific amounts, dates, and IDs.
+- Use the customer's name when available.
+- For high-value claims (>Rs.10,000) or security issues, create a ticket and escalate.
+- Wallet credits cannot exceed Rs.500.
 
 Respond in JSON:
 - If you need to call a tool: {"action": "tool_call", "tool": "<name>", "args": {<params>}, "thought": "<why>"}
@@ -251,10 +386,7 @@ async def agentic_resolver(
             result = json.loads(raw_text) if isinstance(raw_text, str) else raw_text
         except (json.JSONDecodeError, KeyError):
             log_event(
-                "WARN",
-                "Bad JSON from resolver, forcing final answer",
-                run_id=run_id,
-                step=step,
+                "WARN", "Bad JSON from resolver, forcing final answer", run_id=run_id, step=step
             )
             messages.append(
                 {
@@ -305,19 +437,14 @@ async def agentic_resolver(
                 )
             except Exception as exc:
                 tool_output = {"error": str(exc)}
-                log_event(
-                    "ERROR",
-                    "Policy search failed",
-                    run_id=run_id,
-                    error=str(exc),
-                )
+                log_event("ERROR", "Policy search failed", run_id=run_id, error=str(exc))
         elif (
             tool_name == "issue_wallet_credit"
             and tool_args.get("amount", 0) > settings.max_wallet_credit_amount
         ):
             tool_output = {
                 "status": "rejected",
-                "reason": (f"Amount exceeds maximum of Rs.{settings.max_wallet_credit_amount}"),
+                "reason": f"Amount exceeds maximum of Rs.{settings.max_wallet_credit_amount}",
             }
         else:
             try:
@@ -333,29 +460,17 @@ async def agentic_resolver(
             except Exception as exc:
                 tool_output = {"error": str(exc)}
                 log_event(
-                    "ERROR",
-                    "MCP tool call failed",
-                    run_id=run_id,
-                    tool=tool_name,
-                    error=str(exc),
+                    "ERROR", "MCP tool call failed", run_id=run_id, tool=tool_name, error=str(exc)
                 )
 
         tool_results.append({"tool": tool_name, "args": tool_args, "result": tool_output})
         messages.append({"role": "assistant", "content": json.dumps(result)})
         tool_summary = _summarise_for_llm(tool_output)
         messages.append(
-            {
-                "role": "user",
-                "content": f"Tool result: {_safe_json_dumps(tool_summary)}",
-            }
+            {"role": "user", "content": f"Tool result: {_safe_json_dumps(tool_summary)}"}
         )
 
-    messages.append(
-        {
-            "role": "user",
-            "content": "Please give a final answer to the customer now.",
-        }
-    )
+    messages.append({"role": "user", "content": "Please give a final answer to the customer now."})
     raw = await resolver_lm.acall(messages=messages)
     raw_text = raw[0] if isinstance(raw, list) else raw
     final_response = raw_text if isinstance(raw_text, str) else str(raw_text)
@@ -368,9 +483,102 @@ async def agentic_resolver(
     }
 
 
-# ======================================================================
-# 4. HUMAN ESCALATE
-# ======================================================================
+# ---------------------------------------------------------------------------
+# 5. RESPONSE FORMATTER  (polishes user-facing message)
+# ---------------------------------------------------------------------------
+async def response_formatter(
+    state: AgentState,
+    runtime: Runtime[Context],
+) -> dict[str, Any]:
+    """
+    Convert tool results or LLM output into a polished customer message.
+    """
+    run_id = state.get("run_id", "")
+    log_event("INFO", "Node started", node="response_formatter", run_id=run_id)
+
+    # If the action_dispatcher already produced a tool result, format it
+    tool_results = state.get("tool_results") or []
+    customer_ctx = state.get("customer_context") or {}
+    customer = customer_ctx.get("customer") or {}
+    customer_name = customer.get("full_name", "Hello")
+
+    if tool_results:
+        last = tool_results[-1]
+        tool_name = last.get("tool", "")
+        result = last.get("result", {})
+
+        # Wallet credit
+        if tool_name == "issue_wallet_credit":
+            if result.get("status") == "issued":
+                return {
+                    "final_response": (
+                        f"{customer_name}, I've issued Rs.{result['amount']:.0f} as store credit "
+                        f"(transaction #{result['transaction_id']}) for the inconvenience. "
+                        "This will reflect in your wallet within 24 hours. Is there anything else I can help with?"
+                    ),
+                    "resolution_type": "auto_resolved",
+                }
+            else:
+                return {
+                    "final_response": (
+                        f"{customer_name}, I tried to issue a credit but it was rejected: {result.get('reason', 'unknown')}. "
+                        "I'll escalate this for you."
+                    ),
+                    "resolution_type": "escalated",
+                }
+
+        # Refund eligibility
+        if tool_name == "check_refund_eligibility":
+            if result.get("eligible"):
+                return {
+                    "final_response": (
+                        f"{customer_name}, your order is eligible for a refund of Rs.{result['amount']}. "
+                        "I can schedule a return pickup for you. Would you like to proceed?"
+                    ),
+                    "resolution_type": "auto_resolved",
+                }
+            else:
+                return {
+                    "final_response": (
+                        f"{customer_name}, I checked your refund eligibility: {result.get('reason', 'not eligible')}. "
+                        "If you believe this is an error, I can escalate your case."
+                    ),
+                    "resolution_type": "auto_resolved",
+                }
+
+        # Return pickup scheduled
+        if tool_name == "schedule_return_pickup":
+            if result.get("status") == "scheduled":
+                return {
+                    "final_response": (
+                        f"{customer_name}, a return pickup has been scheduled for {result['pickup_date']}. "
+                        "Once the item is received and inspected, your refund will be processed within 5-7 business days."
+                    ),
+                    "resolution_type": "auto_resolved",
+                }
+            else:
+                return {
+                    "final_response": (
+                        f"{customer_name}, I couldn't schedule the pickup: {result.get('reason', 'unknown')}. "
+                        "Let me escalate this for you."
+                    ),
+                    "resolution_type": "escalated",
+                }
+
+    # Fall back to the existing final_response (from LLM or previous node)
+    final_response = (
+        state.get("final_response") or "I wasn't able to process your request. Let me escalate it."
+    )
+    return {
+        "final_response": final_response,
+        "resolution_type": state.get("resolution_type", "auto_resolved"),
+        "ticket_id": state.get("ticket_id"),
+    }
+
+
+# ---------------------------------------------------------------------------
+# 6. HUMAN ESCALATE  (clean ticket creation)
+# ---------------------------------------------------------------------------
 TEAM_ROUTING = {
     "wrong_item_delivered": "order_fulfillment",
     "damaged_product": "service_center",
