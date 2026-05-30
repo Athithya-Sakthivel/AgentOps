@@ -8,8 +8,10 @@ import json
 import logging
 import uuid
 
+from config import settings
 from db import AsyncSessionLocal, HumanOverride, Ticket
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from langchain_core.messages import HumanMessage
 from logging_utils import log_event
 from pydantic import BaseModel
 from sqlalchemy import func, select
@@ -70,23 +72,63 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
             run_id = str(uuid.uuid4())
             log_event("INFO", "Message received", run_id=run_id, session_id=session_id)
 
-            # Initial state matches AgentState (all fields explicitly set)
-            state = {
-                "messages": [{"role": "user", "content": query}],
-                "query_text": query,
-                "user_id": data.get("user_id"),
-                "thread_id": session_id,
-                "run_id": run_id,
-                "guardrail_rejected": False,
-                "classification": None,
-                "customer_context": None,
-                "action_taken": False,
-                "tool_results": [],
-                "resolution_type": None,
-                "ticket_id": None,
-                "final_response": None,
-                "error": None,
-            }
+            config = {"configurable": {"thread_id": session_id}}
+            previous_state = None
+
+            # Load previous conversation state if multi-turn is enabled
+            if settings.multi_turn_enabled:
+                try:
+                    previous = await graph.aget_state(config)
+                    if previous and previous.values:
+                        prev_messages = previous.values.get("messages", [])
+                        if len(prev_messages) >= settings.max_conversation_turns * 2:
+                            log_event(
+                                "INFO",
+                                "Conversation turn limit reached, starting fresh",
+                                run_id=run_id,
+                            )
+                        else:
+                            previous_state = previous.values
+                except Exception:
+                    log_event(
+                        "WARN",
+                        "Failed to load previous state, starting fresh",
+                        run_id=run_id,
+                    )
+
+            if previous_state:
+                # Continue existing conversation
+                state = dict(previous_state)
+                state["messages"] = [
+                    *state.get("messages", []),
+                    HumanMessage(content=query),
+                ]
+                state["query_text"] = query
+                state["run_id"] = run_id
+                state["action_taken"] = False
+                state["tool_results"] = []
+                state["final_response"] = None
+                state["error"] = None
+                if data.get("user_id"):
+                    state["user_id"] = data["user_id"]
+            else:
+                # Fresh conversation
+                state = {
+                    "messages": [HumanMessage(content=query)],
+                    "query_text": query,
+                    "user_id": data.get("user_id"),
+                    "thread_id": session_id,
+                    "run_id": run_id,
+                    "guardrail_rejected": False,
+                    "classification": None,
+                    "customer_context": None,
+                    "action_taken": False,
+                    "tool_results": [],
+                    "resolution_type": None,
+                    "ticket_id": None,
+                    "final_response": None,
+                    "error": None,
+                }
 
             ctx = Context(
                 triage_program=triage_program,
@@ -94,10 +136,8 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                 resolver_lm=resolver_lm,
             )
 
-            config = {"configurable": {"thread_id": session_id}}
             result = await graph.ainvoke(state, config, context=ctx)
 
-            # Normalize ticket_id that may be wrapped by LangChain adapters
             clean_ticket_id = _unwrap_ticket_id(result.get("ticket_id"))
 
             log_event(

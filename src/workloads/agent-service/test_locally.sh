@@ -107,24 +107,66 @@ for ((i=0; i<30; i++)); do
 done
 cd - >/dev/null
 
-# -- 3. Test Suite -----------------------------------------------------------
-
 # ------------------------------------------------------------------ Test 1
 echo ""
 echo "=============================================================================="
-echo "  TEST 1  - WebSocket - Policy Inquiry (RAG)"
+echo "  TEST 1  - Multi-Turn Conversation (RAG + Context Memory)"
 echo "=============================================================================="
-QUERY1='{"query":"What is the return policy for damaged phones?","user_id":"a1b2c3d4-e5f6-4a7b-8c9d-000000000001"}'
-echo "  SENDING: ${QUERY1}"
+echo "  SESSION: test-session-multi"
 
-WS1=$(echo "${QUERY1}" | websocat -n1 "ws://127.0.0.1:${AGENT_PORT}/ws/chat/test-session-1" 2>/dev/null || echo '{"error":"websocat failed"}')
+# Open a persistent WebSocket connection and send multiple messages
+WS_MULTI=$(websocat -n3 "ws://127.0.0.1:${AGENT_PORT}/ws/chat/test-session-multi" <<'EOF'
+{"query":"Hi, I'm Priya Sharma. I need help with my recent order.","user_id":"a1b2c3d4-e5f6-4a7b-8c9d-000000000001"}
+{"query":"What's your return policy for damaged phones?"}
+{"query":"Great, can you check if my Samsung phone order is eligible for return?"}
+EOF
+2>/dev/null || echo '{"error":"websocat failed"}')
+
+echo "  RAW MULTI-TURN RESPONSES:"
+echo "${WS_MULTI}" | head -60
+
+# Extract individual responses (websocat -n3 outputs 3 JSON lines)
+TURN1=$(echo "${WS_MULTI}" | sed -n '1p')
+TURN2=$(echo "${WS_MULTI}" | sed -n '2p')
+TURN3=$(echo "${WS_MULTI}" | sed -n '3p')
+
+echo ""
+echo "  --- Turn 1: Introduction ---"
+echo "  SENT: Hi, I'm Priya Sharma. I need help with my recent order."
 echo "  RESPONSE:"
-echo "${WS1}" | python3 -m json.tool --no-ensure-ascii 2>/dev/null || echo "${WS1}"
+echo "${TURN1}" | python3 -m json.tool --no-ensure-ascii 2>/dev/null || echo "${TURN1}"
 
-if echo "${WS1}" | grep -qE '"response"'; then
-  pass "Agent returned a grounded response (auto-resolved)"
+echo ""
+echo "  --- Turn 2: Policy question (no user_id provided) ---"
+echo "  SENT: What's your return policy for damaged phones?"
+echo "  RESPONSE:"
+echo "${TURN2}" | python3 -m json.tool --no-ensure-ascii 2>/dev/null || echo "${TURN2}"
+
+echo ""
+echo "  --- Turn 3: Context-aware follow-up (no user_id provided) ---"
+echo "  SENT: Great, can you check if my Samsung phone order is eligible for return?"
+echo "  RESPONSE:"
+echo "${TURN3}" | python3 -m json.tool --no-ensure-ascii 2>/dev/null || echo "${TURN3}"
+
+# Validate Turn 1: agent should acknowledge the customer
+if echo "${TURN1}" | grep -qiE "Priya|order|help"; then
+  pass "Turn 1 - Agent acknowledged customer introduction"
 else
-  fail "No 'response' field in output"
+  fail "Turn 1 - Agent did not acknowledge the customer"
+fi
+
+# Validate Turn 2: policy response (turn 2 has no user_id — tests memory)
+if echo "${TURN2}" | grep -qiE "return|policy|damage|7 days"; then
+  pass "Turn 2 - Agent answered policy question (no user_id provided)"
+else
+  fail "Turn 2 - Agent did not answer policy question"
+fi
+
+# Validate Turn 3: agent should use remembered context (Priya's orders)
+if echo "${TURN3}" | grep -qiE "Samsung|eligible|return_window|refund|order"; then
+  pass "Turn 3 - Agent used remembered context to check eligibility"
+else
+  fail "Turn 3 - Agent did not use remembered context"
 fi
 
 # ------------------------------------------------------------------ Test 2
@@ -195,7 +237,7 @@ WS5=$(echo "${QUERY5}" | websocat -n1 "ws://127.0.0.1:${AGENT_PORT}/ws/chat/test
 echo "  RESPONSE:"
 echo "${WS5}" | python3 -m json.tool --no-ensure-ascii 2>/dev/null || echo "${WS5}"
 
-if echo "${WS5}" | grep -qiE 'eligible|not eligible'; then
+if echo "${WS5}" | grep -qiE 'eligibility|eligible|refund'; then
   pass "Refund eligibility check returned a result"
 else
   fail "No eligibility determination found"

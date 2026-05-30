@@ -2,6 +2,7 @@
 LangGraph node implementations - production ready.
 
 All nodes receive Runtime[Context] and use structured logging with run_id.
+No OpenTelemetry. No Groq rate limits - uses Bedrock.
 
 Includes:
   - guardrail_classifier   (DSPy triage)
@@ -270,7 +271,6 @@ async def context_gatherer(
             "get_recent_orders", {"user_id": user_id}, run_id=run_id
         )
 
-    # Ensure orders is always a list
     if not isinstance(orders, list):
         orders = [orders] if orders else []
 
@@ -315,12 +315,10 @@ async def action_dispatcher(
 
     tool_name = mapping["tool"]
 
-    # Build args, calling any callables in the template
     args = {}
     for k, v in mapping.get("args_template", {}).items():
         args[k] = v() if callable(v) else v
 
-    # Only issue_wallet_credit needs user_id
     if tool_name == "issue_wallet_credit":
         user_id = state.get("user_id") or customer.get("id")
         if user_id:
@@ -332,7 +330,6 @@ async def action_dispatcher(
             args["reason"] = "goodwill gesture"
         args["amount"] = float(args["amount"])
 
-    # Order-related tools need an order_id
     orders = customer_ctx.get("orders") or []
     orders = [o for o in orders if isinstance(o, dict)]
 
@@ -469,7 +466,10 @@ async def agentic_resolver(
             result = json.loads(raw_text) if isinstance(raw_text, str) else raw_text
         except (json.JSONDecodeError, KeyError):
             log_event(
-                "WARN", "Bad JSON from resolver, forcing final answer", run_id=run_id, step=step
+                "WARN",
+                "Bad JSON from resolver, forcing final answer",
+                run_id=run_id,
+                step=step,
             )
             messages.append(
                 {
@@ -509,7 +509,6 @@ async def agentic_resolver(
                 "tool_results": tool_results,
             }
 
-        # Validate order_id if required
         if tool_name in ("check_refund_eligibility", "schedule_return_pickup"):
             order_id = tool_args.get("order_id")
             if not order_id:
@@ -573,7 +572,11 @@ async def agentic_resolver(
             except Exception as exc:
                 tool_output = {"error": str(exc)}
                 log_event(
-                    "ERROR", "MCP tool call failed", run_id=run_id, tool=tool_name, error=str(exc)
+                    "ERROR",
+                    "MCP tool call failed",
+                    run_id=run_id,
+                    tool=tool_name,
+                    error=str(exc),
                 )
 
         tool_results.append({"tool": tool_name, "args": tool_args, "result": tool_output})
@@ -624,6 +627,14 @@ async def response_formatter(
         if not isinstance(result, dict):
             result = {"text": str(result)}
 
+        # ---- ERROR HANDLING (must come first) ----
+        if isinstance(result, dict) and result.get("error"):
+            return {
+                "final_response": f"{customer_name}, {result['error']}",
+                "resolution_type": "auto_resolved",
+            }
+
+        # Wallet credit
         if tool_name == "issue_wallet_credit":
             if result.get("status") == "issued":
                 amount = result.get("amount", "unknown")
@@ -645,6 +656,7 @@ async def response_formatter(
                     "resolution_type": "escalated",
                 }
 
+        # Refund eligibility
         if tool_name == "check_refund_eligibility":
             if result.get("eligible"):
                 return {
@@ -664,6 +676,7 @@ async def response_formatter(
                     "resolution_type": "auto_resolved",
                 }
 
+        # Return pickup
         if tool_name == "schedule_return_pickup":
             if result.get("status") == "scheduled":
                 pickup = result.get("pickup_date", "soon")
@@ -683,20 +696,13 @@ async def response_formatter(
                     "resolution_type": "escalated",
                 }
 
-        if result.get("error"):
-            return {
-                "final_response": (
-                    f"{customer_name}, I ran into an issue: {result['error']}. "
-                    "I'll escalate this to our team."
-                ),
-                "resolution_type": "escalated",
-            }
-
+        # Fallback for any other successful tool call
         return {
             "final_response": f"{customer_name}, I've processed your request. Is there anything else I can help with?",
             "resolution_type": "auto_resolved",
         }
 
+    # No tool results - use the LLM's raw final_response
     final_response = (
         state.get("final_response") or "I wasn't able to process your request. Let me escalate it."
     )
@@ -768,8 +774,9 @@ async def human_escalate(
     except Exception:
         log_event("ERROR", "Failed to create ticket", run_id=run_id)
 
+    customer_name = customer.get("full_name", "Hello")
     response = (
-        f"{customer.get('full_name', 'Hello')}, your issue has been flagged as "
+        f"{customer_name}, your issue has been flagged as "
         f"{priority} priority. A {team.replace('_', ' ')} specialist will review "
         f"your case within {sla}. Your reference number is {ticket_id}."
     )

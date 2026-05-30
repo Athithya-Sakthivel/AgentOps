@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     urgency_escalate_threshold: int = 8
     max_auto_resolve_amount: float = 10000.0
     max_wallet_credit_amount: float = 500.0
+    multi_turn_enabled: bool = True
+    max_conversation_turns: int = 20
 
     # -- MCP Server -------------------------------------------------
     mcp_server_url: str = "http://localhost:8001/mcp"
