@@ -5,7 +5,8 @@ export DEBIAN_FRONTEND=noninteractive
 
 sudo apt-get update -qq
 sudo apt-get install -y -qq \
-  ca-certificates curl unzip vim make tree jq python3-pip python3-venv
+  ca-certificates curl unzip vim make tree jq python3-pip python3-venv postgresql-client-common postgresql-client
+
 
 # AWS CLI v2
 curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
@@ -19,6 +20,9 @@ curl -fsSL https://get.opentofu.org/install-opentofu.sh | sh -s -- --install-met
 # Python tooling pinned to current stable releases
 python3 -m pip install --break-system-packages -q \
   pytest==9.0.3 \
-  pre-commit==4.2.0
+  pre-commit==4.2.0 \
+  sqlalchemy[asyncio]==2.0.50 asyncpg==0.31.0
 
 pre-commit install --install-hooks
+
+docker pull docker.io/library/postgres:18.4
