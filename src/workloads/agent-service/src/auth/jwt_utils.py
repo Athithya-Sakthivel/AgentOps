@@ -1,58 +1,47 @@
 """
-JWT verification using remote JWKS (from the stateless OIDC auth service).
+JWT verification using local public key (no external auth service).
 """
 
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
-import httpx
 from config import settings
-from joserfc import jwt
-from joserfc.jwk import KeySet
+from joserfc import jwt as joserfc_jwt
+from joserfc.jwk import ECKey
 
 log = logging.getLogger("agent-service.auth")
 
-_jwks_cache: KeySet | None = None
+_public_key: ECKey | None = None
 
 
-async def _get_jwks() -> KeySet:
-    global _jwks_cache
-    if _jwks_cache is not None:
-        return _jwks_cache
-
-    url = f"{settings.auth_service_url.rstrip('/')}/.well-known/jwks.json"
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        resp = await client.get(url)
-        resp.raise_for_status()
-        data = resp.json()
-        _jwks_cache = KeySet.import_key_set(data["keys"])
-        log.info("JWKS loaded from %s", url)
-    return _jwks_cache
+def _get_public_key() -> ECKey:
+    global _public_key
+    if _public_key is not None:
+        return _public_key
+    private_key = ECKey.import_key(settings.jwt_private_key_pem)
+    pub_dict = private_key.as_dict(private=False)
+    pub_dict["kid"] = settings.jwt_kid
+    _public_key = ECKey.import_key(pub_dict)
+    return _public_key
 
 
 async def verify_access_token(token_str: str) -> dict[str, Any]:
-    """Verify a JWT issued by the auth service and return its claims.
-
-    Raises:
-        ValueError: if the token is invalid or expired.
-    """
+    """Verify a JWT and return its claims."""
     if not token_str:
         raise ValueError("Empty token")
 
-    jwks = await _get_jwks()
+    public_key = _get_public_key()
     try:
-        token = jwt.decode(token_str, jwks)
+        token = joserfc_jwt.decode(token_str, public_key, algorithms=[settings.jwt_alg])
     except Exception as exc:
         log.warning("JWT verification failed: %s", exc)
         raise ValueError("Invalid token") from exc
 
     claims = dict(token.claims)
-
-    # Validate standard claims
-    now = __import__("time").time()
-    if claims.get("exp", 0) < now:
+    if claims.get("exp", 0) < time.time():
         raise ValueError("Token expired")
 
     return claims

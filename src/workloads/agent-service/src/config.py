@@ -1,7 +1,7 @@
 """
 Centralised configuration for the Agent Service.
 All secrets are loaded from SSM Parameter Store at startup.
-No .env file dependency — env vars are only used for SSM override in dev.
+No .env file dependency.
 """
 
 from __future__ import annotations
@@ -88,7 +88,6 @@ settings = Settings()
 
 
 def _fetch_ssm(name: str, decrypt: bool = False) -> str:
-    """Fetch a single SSM parameter. Raises if not found."""
     ssm = boto3.client("ssm", region_name=settings.aws_region)
     resp = ssm.get_parameter(Name=name, WithDecryption=decrypt)
     return resp["Parameter"]["Value"]
@@ -96,10 +95,7 @@ def _fetch_ssm(name: str, decrypt: bool = False) -> str:
 
 @lru_cache(maxsize=1)
 def load_ssm_parameters() -> None:
-    """
-    ALWAYS fetch secrets from SSM and override settings.
-    This catches missing/invalid parameters at startup — no silent fallbacks.
-    """
+    """Fetch secrets from SSM and override settings."""
     if settings.deployment_environment == "local" and settings.jwt_private_key_pem:
         log.info("Skipping SSM load — jwt_private_key_pem already set via env")
         return
