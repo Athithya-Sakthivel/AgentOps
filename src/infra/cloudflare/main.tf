@@ -1,0 +1,130 @@
+variable "account_id" {
+  type = string
+}
+
+variable "zone_id" {
+  type    = string
+  default = null
+}
+
+variable "domain" {
+  type = string
+}
+
+variable "tunnel_name" {
+  description = "Cloudflare Tunnel name used by cloudflared"
+  type        = string
+  default     = "default-tunnel-1"
+}
+
+variable "enable_always_use_https" {
+  type    = bool
+  default = true
+}
+
+variable "enable_tls_1_3" {
+  type    = bool
+  default = true
+}
+
+variable "enable_bot_fight_mode" {
+  type    = bool
+  default = false
+}
+
+variable "enable_js_detections" {
+  type    = bool
+  default = false
+}
+
+locals {
+  domain       = trim(var.domain, ".")
+  tunnel_cname = "${data.cloudflare_zero_trust_tunnel_cloudflared.default.id}.cfargotunnel.com"
+}
+
+data "cloudflare_zero_trust_tunnel_cloudflared" "default" {
+  account_id = var.account_id
+
+  filter = {
+    name       = var.tunnel_name
+    is_deleted = false
+  }
+}
+
+data "cloudflare_zero_trust_tunnel_cloudflared_token" "default" {
+  account_id = var.account_id
+  tunnel_id  = data.cloudflare_zero_trust_tunnel_cloudflared.default.id
+}
+
+# Single DNS record for the root domain
+resource "cloudflare_dns_record" "root_cname" {
+  zone_id = var.zone_id
+  name    = local.domain
+  type    = "CNAME"
+  content = local.tunnel_cname
+  proxied = true
+  ttl     = 1
+}
+
+# Wildcard record for any subdomains (optional, remove if not needed)
+resource "cloudflare_dns_record" "wildcard_cname" {
+  zone_id = var.zone_id
+  name    = "*.${local.domain}"
+  type    = "CNAME"
+  content = local.tunnel_cname
+  proxied = true
+  ttl     = 1
+}
+
+resource "cloudflare_zone_setting" "ssl" {
+  zone_id    = var.zone_id
+  setting_id = "ssl"
+  value      = "strict"
+}
+
+resource "cloudflare_zone_setting" "always_use_https" {
+  count      = var.enable_always_use_https ? 1 : 0
+  zone_id    = var.zone_id
+  setting_id = "always_use_https"
+  value      = "on"
+}
+
+resource "cloudflare_zone_setting" "tls_1_3" {
+  count      = var.enable_tls_1_3 ? 1 : 0
+  zone_id    = var.zone_id
+  setting_id = "tls_1_3"
+  value      = "on"
+}
+
+resource "cloudflare_bot_management" "zone" {
+  zone_id = var.zone_id
+
+  fight_mode = var.enable_bot_fight_mode
+  enable_js  = var.enable_js_detections
+
+  ai_bots_protection = "block"
+  crawler_protection = "enabled"
+
+  lifecycle {
+    ignore_changes = [
+      auto_update_model
+    ]
+  }
+}
+
+output "cloudflare_tunnel_id" {
+  value = data.cloudflare_zero_trust_tunnel_cloudflared.default.id
+}
+
+output "cloudflare_tunnel_name" {
+  value = data.cloudflare_zero_trust_tunnel_cloudflared.default.name
+}
+
+output "cloudflare_tunnel_token" {
+  value     = data.cloudflare_zero_trust_tunnel_cloudflared_token.default.token
+  sensitive = true
+}
+
+output "root_url" {
+  value = "https://${local.domain}"
+}

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AgentOps</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="bg-gray-50 min-h-screen flex items-center justify-center">
+  <div class="max-w-md w-full p-6">
+    <div class="bg-white p-6 rounded shadow text-center">
+      <h1 class="text-xl font-semibold mb-4">AgentOps Support</h1>
+      <p class="text-gray-600 mb-6">Sign in to chat with our support agent or access the admin dashboard.</p>
+
+      <div id="logged-out" class="space-y-3">
+        <a href="/auth/login" class="block w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded transition text-center">
+          Sign in with Google / Microsoft
+        </a>
+      </div>
+
+      <div id="logged-in" class="hidden space-y-3">
+        <p class="text-sm text-gray-600">Signed in as <span id="user-name" class="font-medium"></span></p>
+        <a href="/chat.html" class="block w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded transition text-center">
+          Open Chat
+        </a>
+        <a href="/admin.html" class="block w-full bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-4 rounded transition text-center" id="admin-link" style="display:none">
+          Admin Dashboard
+        </a>
+        <button onclick="logout()" class="block w-full bg-red-500 hover:bg-red-600 text-white font-medium py-2 px-4 rounded transition">
+          Sign Out
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+  <script>
+    async function init() {
+      const token = localStorage.getItem('app_jwt');
+      if (!token) {
+        document.getElementById('logged-out').classList.remove('hidden');
+        return;
+      }
+      try {
+        const resp = await fetch('/auth/me', { headers: { 'Authorization': 'Bearer ' + token } });
+        if (!resp.ok) throw new Error('invalid');
+        const data = await resp.json();
+        document.getElementById('logged-out').classList.add('hidden');
+        document.getElementById('logged-in').classList.remove('hidden');
+        document.getElementById('user-name').textContent = data.user.name || data.user.email;
+
+        const email = data.user.email || '';
+        const domain = email.split('@')[1] || '';
+        if (domain === 'your-company.com') {
+          document.getElementById('admin-link').style.display = 'block';
+        }
+      } catch (e) {
+        localStorage.removeItem('app_jwt');
+        document.getElementById('logged-out').classList.remove('hidden');
+      }
+    }
+    init();
+  </script>
+</body>
+</html>

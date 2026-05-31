@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AgentOps Admin</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <header class="bg-white shadow-sm p-4 flex justify-between items-center">
+    <h1 class="text-lg font-bold">AgentOps Admin</h1>
+    <div class="text-sm">
+      <a href="/" class="text-blue-600 hover:underline">Home</a>
+      <button onclick="logout()" class="ml-4 text-red-600 hover:underline">Sign Out</button>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto p-6 space-y-6">
+    <section>
+      <h2 class="text-lg font-semibold mb-3">Ticket Queue</h2>
+      <div id="queue" class="bg-white rounded-lg shadow p-4 text-sm text-gray-500">Loading...</div>
+    </section>
+
+    <section>
+      <h2 class="text-lg font-semibold mb-3">Analytics</h2>
+      <div id="analytics" class="bg-white rounded-lg shadow p-4 text-sm text-gray-500">Loading...</div>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+  <script>
+    const token = localStorage.getItem('app_jwt');
+    if (!token) { window.location.href = '/auth/login'; }
+
+    async function loadQueue() {
+      const resp = await fetch('/admin/queue', { headers: { 'Authorization': 'Bearer ' + token } });
+      const data = await resp.json();
+      if (!resp.ok) { document.getElementById('queue').innerHTML = '<span class="text-red-500">Access denied</span>'; return; }
+      let html = `<p class="mb-2 font-medium">${data.count} open tickets</p>`;
+      data.tickets.forEach(t => {
+        html += `<div class="border border-gray-200 rounded p-3 mb-2 text-sm">
+          <div class="flex justify-between"><span class="font-medium">${t.id}</span><span class="text-xs bg-${t.priority === 'critical' ? 'red' : t.priority === 'high' ? 'orange' : 'gray'}-100 px-2 rounded">${t.priority}</span></div>
+          <p class="text-gray-700 mt-1">${t.query_text}</p>
+          <div class="text-xs text-gray-400 mt-1">Intent: ${t.classification?.intent || 'N/A'} | ${t.created_at}</div>
+        </div>`;
+      });
+      document.getElementById('queue').innerHTML = html;
+    }
+
+    async function loadAnalytics() {
+      const resp = await fetch('/admin/analytics', { headers: { 'Authorization': 'Bearer ' + token } });
+      const data = await resp.json();
+      if (!resp.ok) { document.getElementById('analytics').innerHTML = '<span class="text-red-500">Access denied</span>'; return; }
+      document.getElementById('analytics').innerHTML = `
+        <div class="grid grid-cols-3 gap-4">
+          <div class="bg-blue-50 p-4 rounded"><p class="text-2xl font-bold">${data.total_tickets}</p><p class="text-xs text-gray-500">Total Tickets</p></div>
+          <div class="bg-green-50 p-4 rounded"><p class="text-2xl font-bold">${data.auto_resolved}</p><p class="text-xs text-gray-500">Auto Resolved</p></div>
+          <div class="bg-purple-50 p-4 rounded"><p class="text-2xl font-bold">${data.auto_resolution_rate}%</p><p class="text-xs text-gray-500">Resolution Rate</p></div>
+        </div>`;
+    }
+
+    loadQueue();
+    loadAnalytics();
+  </script>
+</body>
+</html>

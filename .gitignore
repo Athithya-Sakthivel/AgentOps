@@ -219,9 +219,12 @@ __marimo__/
 .repos
 .tmp.md
 
-
-src/infra/.plans
-src/infra/.backend
-src/infra/.terraform
-src/infra/terraform.tfstate
+.terraform
+plans
+.backend
+.terraform
+terraform.tfstate
 postgres
+terraform.tfstate.backup
+tfplan
+.plans

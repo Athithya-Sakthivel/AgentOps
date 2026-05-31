@@ -28,3 +28,8 @@ python3 -m pip install --break-system-packages -q \
 pre-commit install --install-hooks
 
 docker pull docker.io/library/postgres:18.4
+
+CLOUDFLARED_VERSION="2026.5.0"          # ← update this manually when you want to upgrade
+BIN_URL="https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64"
+curl -L "${BIN_URL}" -o /usr/local/bin/cloudflared
+chmod +x /usr/local/bin/cloudflared

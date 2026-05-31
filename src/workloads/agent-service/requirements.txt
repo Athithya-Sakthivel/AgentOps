@@ -9,7 +9,7 @@ anyio==4.13.0
 asyncer==0.0.8
 asyncpg==0.31.0
 attrs==26.1.0
-Authlib==1.7.2
+Authlib==1.7.1
 beartype==0.22.9
 boto3==1.43.18
 botocore==1.43.18
@@ -47,6 +47,7 @@ httpx-sse==0.4.3
 huggingface_hub==1.17.0
 idna==3.17
 importlib_metadata==8.9.0
+itsdangerous==2.2.0
 jaraco.classes==3.4.0
 jaraco.context==6.1.2
 jaraco.functools==4.5.0
@@ -54,7 +55,7 @@ jeepney==0.9.0
 Jinja2==3.1.6
 jiter==0.15.0
 jmespath==1.1.0
-joserfc==1.6.8
+joserfc==1.6.4
 json_repair==0.59.10
 jsonpatch==1.33
 jsonpointer==3.1.1
