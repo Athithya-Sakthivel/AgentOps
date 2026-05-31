@@ -13,8 +13,6 @@ set -euo pipefail
 # Required env vars:
 #   TEMP_TEST_EMAIL        - Google/Microsoft email for auth tests
 #   TEMP_TEST_EMAIL_PASS   - Password for the test email account
-#   GOOGLE_CLIENT_ID       - OAuth client ID
-#   GOOGLE_CLIENT_SECRET   - OAuth client secret
 #   AWS_REGION             - e.g. ap-south-1
 #
 # Optional overrides (tests will set defaults):
