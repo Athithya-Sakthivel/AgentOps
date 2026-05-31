@@ -244,47 +244,43 @@ fi
 # =============================================================================
 
 # ------------------------------------------------------------------ ADMIN-1
+
 echo ""
 echo "=============================================================================="
-echo "  ADMIN-1 - Ticket Queue"
+echo "  ADMIN-1 - Ticket Queue (requires auth - returns 401 without token)"
 echo "=============================================================================="
-QUEUE=$(curl -fsS --max-time 5 "${AGENT_URL}/admin/queue" 2>/dev/null || echo '{"error":"failed"}')
-TICKET_COUNT=$(echo "${QUEUE}" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('count',0))" 2>/dev/null || echo 0)
-echo "  Queue contains ${TICKET_COUNT} tickets"
-if [ "${TICKET_COUNT}" -gt 0 ] 2>/dev/null; then
-  pass "ADMIN-1 - Queue returned ${TICKET_COUNT} tickets"
+ADMIN1_CODE=$(curl -s -o /dev/null -w '%{http_code}' "${AGENT_URL}/admin/queue" 2>/dev/null)
+if [ "${ADMIN1_CODE}" = "401" ]; then
+  pass "ADMIN-1 - /admin/queue returns 401 without token"
 else
-  fail "ADMIN-1 - Queue empty"
+  fail "ADMIN-1 - Expected 401, got ${ADMIN1_CODE}"
 fi
 
 # ------------------------------------------------------------------ ADMIN-2
 echo ""
 echo "=============================================================================="
-echo "  ADMIN-2 - Analytics"
+echo "  ADMIN-2 - Analytics (requires auth - returns 401 without token)"
 echo "=============================================================================="
-ANALYTICS=$(curl -fsS --max-time 5 "${AGENT_URL}/admin/analytics" 2>/dev/null || echo '{"error":"failed"}')
-echo "${ANALYTICS}" | python3 -m json.tool --no-ensure-ascii 2>/dev/null || echo "${ANALYTICS}"
-if echo "${ANALYTICS}" | grep -q '"total_tickets"'; then
-  pass "ADMIN-2 - Analytics returned metrics"
+ADMIN2_CODE=$(curl -s -o /dev/null -w '%{http_code}' "${AGENT_URL}/admin/analytics" 2>/dev/null)
+if [ "${ADMIN2_CODE}" = "401" ]; then
+  pass "ADMIN-2 - /admin/analytics returns 401 without token"
 else
-  fail "ADMIN-2 - Analytics failed"
+  fail "ADMIN-2 - Expected 401, got ${ADMIN2_CODE}"
 fi
 
 # ------------------------------------------------------------------ ADMIN-3
 echo ""
 echo "=============================================================================="
-echo "  ADMIN-3 - Override"
+echo "  ADMIN-3 - Override (requires auth - returns 401 without token)"
 echo "=============================================================================="
-OVERRIDE=$(curl -fsS --max-time 5 -X POST "${AGENT_URL}/admin/override" \
+ADMIN3_CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST "${AGENT_URL}/admin/override" \
   -H "Content-Type: application/json" \
-  -d '{"ticket_id":"e5f6a7b8-c9d0-4e1f-2a3b-000000000001","original_classification":{"intent":"test"},"corrected_classification":{"intent":"corrected"},"reason":"e2e test","overridden_by":"tester"}' 2>/dev/null || echo '{"error":"failed"}')
-echo "${OVERRIDE}" | python3 -m json.tool --no-ensure-ascii 2>/dev/null || echo "${OVERRIDE}"
-if echo "${OVERRIDE}" | grep -q '"status"'; then
-  pass "ADMIN-3 - Override stored"
+  -d '{"ticket_id":"e5f6a7b8-c9d0-4e1f-2a3b-000000000001","original_classification":{"intent":"test"},"corrected_classification":{"intent":"corrected"},"reason":"e2e","overridden_by":"tester"}' 2>/dev/null)
+if [ "${ADMIN3_CODE}" = "401" ]; then
+  pass "ADMIN-3 - /admin/override returns 401 without token"
 else
-  fail "ADMIN-3 - Override failed"
+  fail "ADMIN-3 - Expected 401, got ${ADMIN3_CODE}"
 fi
-
 # -- Final Summary -----------------------------------------------------------
 echo ""
 echo "=============================================================================="

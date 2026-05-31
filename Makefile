@@ -41,10 +41,3 @@ clean:
 	rm -rf logs
 	rm -rf src/terraform/.plans
 	clear
-
-test-infra:
-	bash src/infra/run.sh --env staging --create || true && bash src/infra/run.sh --destroy --env staging --yes-delete || true && \
-	bash src/infra/run.sh --env staging --create
-
-infra:
-	bash src/infra/run.sh --env staging --create

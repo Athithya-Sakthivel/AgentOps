@@ -267,8 +267,8 @@ async def _manual_token_exchange(provider: str, client, code: str) -> dict[str, 
             resp = await h.post(token_endpoint, data=data, headers={"Accept": "application/json"})
             resp.raise_for_status()
             return resp.json()
-    except Exception as exc:
-        log.error("manual token exchange failed: %s", exc)
+    except Exception:
+        log.error("manual token exchange failed")
         return {}
 
 

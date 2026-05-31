@@ -3,61 +3,82 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>AgentOps</title>
-  <link rel="stylesheet" href="/style.css">
+  <title>Kestral — Support</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
 </head>
-<body class="bg-gray-50 min-h-screen flex items-center justify-center">
-  <div class="max-w-md w-full p-6">
-    <div class="bg-white p-6 rounded shadow text-center">
-      <h1 class="text-xl font-semibold mb-4">AgentOps Support</h1>
-      <p class="text-gray-600 mb-6">Sign in to chat with our support agent or access the admin dashboard.</p>
-
-      <div id="logged-out" class="space-y-3">
-        <a href="/auth/login" class="block w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded transition text-center">
-          Sign in with Google / Microsoft
-        </a>
-      </div>
-
-      <div id="logged-in" class="hidden space-y-3">
-        <p class="text-sm text-gray-600">Signed in as <span id="user-name" class="font-medium"></span></p>
-        <a href="/chat.html" class="block w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded transition text-center">
-          Open Chat
-        </a>
-        <a href="/admin.html" class="block w-full bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-4 rounded transition text-center" id="admin-link" style="display:none">
-          Admin Dashboard
-        </a>
-        <button onclick="logout()" class="block w-full bg-red-500 hover:bg-red-600 text-white font-medium py-2 px-4 rounded transition">
-          Sign Out
-        </button>
+<body class="landing">
+  <nav class="nav">
+    <div class="nav-inner">
+      <a href="/" class="nav-brand">
+        <span class="brand-icon">🏪</span>
+        <span class="brand-text">Kestral</span>
+      </a>
+      <div class="nav-links">
+        <a href="/chat.html" class="nav-link">Support</a>
       </div>
     </div>
-  </div>
+  </nav>
+
+  <main class="hero">
+    <div class="hero-content">
+      <h1 class="hero-title">We're here to help</h1>
+      <p class="hero-subtitle">Get instant support from our AI assistant. Check orders, request refunds, track deliveries, and more — all in one place.</p>
+
+      <div id="logged-out" class="auth-card">
+        <h2 class="auth-title">Sign in to continue</h2>
+        <p class="auth-hint">Use your Google or Microsoft account</p>
+        <div class="auth-buttons">
+          <a href="/auth/login" class="btn btn-google">
+            <svg class="btn-icon" viewBox="0 0 24 24"><path fill="#EA4335" d="M12 10.2v3.6h5.2c-.2 1.2-1.4 3.6-5.2 3.6-3.1 0-5.6-2.6-5.6-5.8S8.9 6.8 12 6.8c1.8 0 2.9.8 3.6 1.5l2.4-2.3C17.2 4 14.8 3 12 3 7.6 3 4 6.6 4 11s3.6 8 8 8c4.6 0 7-3.2 7-7.7 0-.5 0-.9-.1-1.1H12z"/></svg>
+            <span>Continue with Google</span>
+          </a>
+          <a href="/auth/login/start/microsoft" class="btn btn-microsoft">
+            <svg class="btn-icon" viewBox="0 0 24 24"><rect x="2" y="2" width="9" height="9" fill="#F35325"/><rect x="13" y="2" width="9" height="9" fill="#81BC06"/><rect x="2" y="13" width="9" height="9" fill="#05A6F0"/><rect x="13" y="13" width="9" height="9" fill="#FFBA08"/></svg>
+            <span>Continue with Microsoft</span>
+          </a>
+        </div>
+      </div>
+
+      <div id="logged-in" class="auth-card hidden">
+        <div class="user-profile">
+          <div class="user-avatar" id="user-avatar"></div>
+          <div>
+            <div class="user-name" id="user-name"></div>
+            <div class="user-email" id="user-email"></div>
+          </div>
+        </div>
+        <div class="auth-buttons">
+          <a href="/chat.html" class="btn btn-primary">💬 Open Support Chat</a>
+          <a href="/admin.html" class="btn btn-admin hidden" id="admin-link">📊 Admin Dashboard</a>
+        </div>
+        <button onclick="logout()" class="btn btn-ghost">Sign Out</button>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <p>&copy; 2026 Kestral Commerce. All rights reserved.</p>
+  </footer>
 
   <script src="/app.js"></script>
   <script>
     async function init() {
       const token = localStorage.getItem('app_jwt');
-      if (!token) {
-        document.getElementById('logged-out').classList.remove('hidden');
-        return;
-      }
+      if (!token) { document.getElementById('logged-out').classList.remove('hidden'); return; }
       try {
         const resp = await fetch('/auth/me', { headers: { 'Authorization': 'Bearer ' + token } });
         if (!resp.ok) throw new Error('invalid');
         const data = await resp.json();
         document.getElementById('logged-out').classList.add('hidden');
         document.getElementById('logged-in').classList.remove('hidden');
-        document.getElementById('user-name').textContent = data.user.name || data.user.email;
-
-        const email = data.user.email || '';
-        const domain = email.split('@')[1] || '';
-        if (domain === 'your-company.com') {
-          document.getElementById('admin-link').style.display = 'block';
-        }
-      } catch (e) {
-        localStorage.removeItem('app_jwt');
-        document.getElementById('logged-out').classList.remove('hidden');
-      }
+        document.getElementById('user-name').textContent = data.user.name || 'Customer';
+        document.getElementById('user-email').textContent = data.user.email || '';
+        document.getElementById('user-avatar').textContent = (data.user.name || 'U')[0].toUpperCase();
+        const domain = (data.user.email || '').split('@')[1] || '';
+        if (domain === 'gmail.com') document.getElementById('admin-link').classList.remove('hidden');
+      } catch (e) { localStorage.removeItem('app_jwt'); window.location.reload(); }
     }
     init();
   </script>

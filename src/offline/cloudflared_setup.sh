@@ -48,38 +48,44 @@ echo "[INFO] Tunnel ID: ${TUNNEL_ID}"
 # ── 4. Write cloudflared config with selective ingress ─────────────
 mkdir -p ~/.cloudflared
 
-cat > ~/.cloudflared/agentops-tunnel.yml << YAML
-# tunnel: ${TUNNEL_ID}   # Optional if provided in 'run' command
-
+cat > ~/.cloudflared/agentops-tunnel.yml << 'YAML'
 ingress:
-  # 🚫 BLOCK internal/administrative endpoints (must come before '/' rule)
-  - hostname: ${DOMAIN}
-    path: ^/healthz$      # Exact match only
+  # Block internal endpoints
+  - hostname: athithya.site
+    path: ^/healthz$
     service: http_status:403
-  - hostname: ${DOMAIN}
+  - hostname: athithya.site
     path: ^/readyz$
     service: http_status:403
-  - hostname: ${DOMAIN}
+  - hostname: athithya.site
     path: /admin/*
     service: http_status:403
 
-  # ✅ Public routes (specific paths)
-  - hostname: ${DOMAIN}
+  # Auth + WebSocket + API
+  - hostname: athithya.site
     path: /auth/*
-    service: http://localhost:${AGENT_PORT}
-  - hostname: ${DOMAIN}
+    service: http://localhost:8000
+  - hostname: athithya.site
     path: /ws/*
-    service: http://localhost:${AGENT_PORT}
-  - hostname: ${DOMAIN}
+    service: http://localhost:8000
+    originRequest:
+      connectTimeout: "10s"
+      keepAliveTimeout: "120s"
+      disableChunkedEncoding: false
+  - hostname: athithya.site
     path: /.well-known/*
-    service: http://localhost:${AGENT_PORT}
+    service: http://localhost:8000
 
-  # 🌍 Root path (catch-all for remaining valid requests)
-  - hostname: ${DOMAIN}
+  # Root (frontend)
+  - hostname: athithya.site
     path: /
-    service: http://localhost:${AGENT_PORT}
+    service: http://localhost:8000
+    originRequest:
+      connectTimeout: "10s"
+      keepAliveTimeout: "60s"
+      disableChunkedEncoding: false
 
-  # ⚠️ MANDATORY catch-all for any unmatched host/path
+  # Catch-all
   - service: http_status:404
 YAML
 

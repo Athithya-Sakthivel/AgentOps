@@ -1,5 +1,5 @@
 # providers.tf
-# Combined provider configurations for both AWS and Cloudflare
+# Combined provider configurations for AWS
 
 terraform {
   required_version = ">= 1.11.6, < 2.0.0"
@@ -14,12 +14,35 @@ terraform {
       source  = "hashicorp/tls"
       version = ">= 4.2.1, < 5.0.0"
     }
-
-    cloudflare = {
-      source  = "cloudflare/cloudflare"
-      version = ">= 5.19.0, < 6.0.0"
-    }
   }
+}
+
+###############################################################################
+# VARIABLES
+###############################################################################
+
+variable "region" {
+  description = "AWS region for resource deployment"
+  type        = string
+  default     = "ap-south-1"
+}
+
+variable "environment" {
+  description = "Environment name (e.g., staging, production)"
+  type        = string
+  default     = "staging"
+}
+
+variable "name_prefix" {
+  description = "Prefix for resource naming"
+  type        = string
+  default     = "agentops"
+}
+
+variable "tags" {
+  description = "Additional tags to apply to all resources"
+  type        = map(string)
+  default     = {}
 }
 
 ###############################################################################
@@ -39,18 +62,3 @@ provider "aws" {
     )
   }
 }
-
-###############################################################################
-# CLOUDFLARE PROVIDER
-###############################################################################
-
-provider "cloudflare" {
-  # No explicit configuration needed if using environment variables:
-  # CLOUDFLARE_EMAIL, CLOUDFLARE_API_KEY, or CLOUDFLARE_API_TOKEN
-  # Alternatively, configure here if needed:
-  # email   = var.cloudflare_email
-  # api_key = var.cloudflare_api_key
-  # api_token = var.cloudflare_api_token
-}
-
-

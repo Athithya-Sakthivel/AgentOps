@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# src/infra/run.sh
+# src/infra/aws/run.sh
 # Production-ready, idempotent wrapper to manage OpenTofu (tofu) lifecycle:
 #  - --plan      : init backend, fmt/validate (auto-fix), produce a plan file (dry-run)
 #  - --create    : init backend, fmt/validate (auto-fix), plan, then apply -auto-approve
@@ -9,10 +9,10 @@
 #  --env staging --rollback-state mJy09P8lI1XBnjVKjgtHja_rNDhZUOMF --yes-delete
 #
 # Usage:
-#   bash src/infra/run.sh --plan  --env staging
-#   bash src/infra/run.sh --create --env staging
-#   bash src/infra/run.sh --destroy --env staging --yes-delete
-#   bash src/infra/run.sh --env staging --find-version
+#   bash src/infra/aws/run.sh --plan  --env staging
+#   bash src/infra/aws/run.sh --create --env staging
+#   bash src/infra/aws/run.sh --destroy --env staging --yes-delete
+#   bash src/infra/aws/run.sh --env staging --find-version
 #
 # Notes / invariants:
 #  - AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION are used (fallback ap-south-1).
@@ -26,8 +26,53 @@ IFS=$'\n\t'
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 STACK_DIR="$SCRIPT_DIR"
 ROOT_DIR="$(cd -- "${SCRIPT_DIR}/../../../../" && pwd -P)"
-AWS_REGION="${AWS_DEFAULT_REGION:-ap-south-1}"
 
+# ----------------------------------------------------------------------
+# Environment variable defaults (can be overridden before calling script)
+# ----------------------------------------------------------------------
+export TF_VAR_region="${TF_VAR_region:-ap-south-1}"
+export TF_VAR_environment="${TF_VAR_environment:-staging}"
+export TF_VAR_name_prefix="${TF_VAR_name_prefix:-agentops-staging}"
+
+# ---- VPC ----
+export TF_VAR_vpc_cidr_block="${TF_VAR_vpc_cidr_block:-10.20.0.0/16}"
+export TF_VAR_azs="${TF_VAR_azs:-[\"ap-south-1a\",\"ap-south-1b\"]}"
+export TF_VAR_public_subnet_cidrs="${TF_VAR_public_subnet_cidrs:-[\"10.20.1.0/24\",\"10.20.2.0/24\"]}"
+export TF_VAR_private_subnet_cidrs="${TF_VAR_private_subnet_cidrs:-[\"10.20.11.0/24\",\"10.20.12.0/24\"]}"
+
+# ---- Tags ----
+export TF_VAR_tags="${TF_VAR_tags:-{\"Project\":\"agentops\",\"Stack\":\"staging\"}}"
+
+# ---- S3 & ECR ----
+export TF_VAR_bucket_name="${TF_VAR_bucket_name:-agentops-staging-embeddings-bucket}"
+export TF_VAR_force_destroy="${TF_VAR_force_destroy:-true}"
+export TF_VAR_agent_repository_name="${TF_VAR_agent_repository_name:-agentops-staging-agent-service}"
+export TF_VAR_mcp_repository_name="${TF_VAR_mcp_repository_name:-agentops-staging-mcp-server}"
+
+# ---- GitHub CI/CD ----
+export TF_VAR_github_repository="${TF_VAR_github_repository:-Athithya-Sakthivel/AgentOps}"
+
+# ---- Cloudflare (sensitive – override with real token) ----
+# Try to fetch token from cloudflare module output, but allow override
+if [ -z "${TF_VAR_cloudflare_tunnel_token:-}" ]; then
+  export TF_VAR_cloudflare_tunnel_token="$(tofu -chdir=src/infra/cloudflare output -raw cloudflare_tunnel_token 2>/dev/null || echo "")"
+fi
+
+# ---- RDS (disabled in staging to save cost) ----
+export TF_VAR_create_rds="${TF_VAR_create_rds:-false}"
+export TF_VAR_db_password="${TF_VAR_db_password:-}"                     # leave empty – Terraform generates random password
+
+# ---- Budget & Alerts ----
+export TF_VAR_monthly_budget_amount="${TF_VAR_monthly_budget_amount:-100}"
+export TF_VAR_alert_emails="${TF_VAR_alert_emails:-[\"athithya651@gmail.com\"]}"
+export TF_VAR_alarm_sns_topic_arn="${TF_VAR_alarm_sns_topic_arn:-}"    # optional – set if you have an SNS topic
+
+# ---- ECS Flag (deploy ECS cluster and services) ----
+export TF_VAR_enable_ecs="${TF_VAR_enable_ecs:-true}"
+
+# ----------------------------------------------------------------------
+# Helper functions
+# ----------------------------------------------------------------------
 usage() {
   cat <<USAGE >&2
 Usage:
@@ -47,7 +92,7 @@ Flags:
 
 Notes:
   Requires aws, tofu, python3 in PATH.
-  Uses <env>.tfvars from ${STACK_DIR}.
+  Uses TF_VAR_* environment variables exclusively (no .tfvars files).
 USAGE
   exit 2
 }
@@ -151,7 +196,6 @@ PLAN_DIR="${STACK_DIR}/.plans"
 mkdir -p "$PLAN_DIR"
 
 PLAN_FILE="${PLAN_DIR}/${ENVIRONMENT}.tfplan"
-VAR_FILE="${STACK_DIR}/${ENVIRONMENT}.tfvars"
 
 ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text 2>/dev/null || true)"
 if [ -z "$ACCOUNT_ID" ] || [ "$ACCOUNT_ID" = "None" ]; then
@@ -207,8 +251,6 @@ ensure_bucket_exists_and_versioning() {
   set -e
 }
 
-# DynamoDB function ensure_dynamodb_table() has been removed.
-
 validate_backend() {
   local bucket="$1"
   local key="$2"
@@ -233,7 +275,6 @@ validate_backend() {
     return 3
   fi
 
-  # No DynamoDB check – locking is handled natively by S3 via use_lockfile=true
   exec_and_log "tofu-init-validate" bash -c "cd \"$STACK_DIR\" && tofu init -backend-config \"bucket=${bucket}\" -backend-config \"key=${key}\" -backend-config \"region=${region}\" -backend-config \"use_lockfile=true\" -input=false"
   log "Validation OK"
 }
@@ -259,11 +300,8 @@ validate_config() {
 }
 
 build_plan() {
-  if [ -f "$VAR_FILE" ]; then
-    exec_and_log "tofu-plan" bash -c "cd \"$STACK_DIR\" && tofu plan -var-file=\"$VAR_FILE\" -out=\"$PLAN_FILE\" -input=false"
-  else
-    exec_and_log "tofu-plan" bash -c "cd \"$STACK_DIR\" && tofu plan -out=\"$PLAN_FILE\" -input=false"
-  fi
+  # No .tfvars file used – all variables come from environment
+  exec_and_log "tofu-plan" bash -c "cd \"$STACK_DIR\" && tofu plan -out=\"$PLAN_FILE\" -input=false"
   log "Plan written to ${PLAN_FILE}"
 }
 
@@ -276,11 +314,94 @@ apply_plan_auto() {
 }
 
 destroy_auto() {
-  if [ -f "$VAR_FILE" ]; then
-    exec_and_log "tofu-destroy" bash -c "cd \"$STACK_DIR\" && tofu destroy -var-file=\"$VAR_FILE\" -input=false -auto-approve"
-  else
-    exec_and_log "tofu-destroy" bash -c "cd \"$STACK_DIR\" && tofu destroy -input=false -auto-approve"
+  # No .tfvars file – rely on environment variables
+  exec_and_log "tofu-destroy" bash -c "cd \"$STACK_DIR\" && tofu destroy -input=false -auto-approve"
+}
+
+
+force_cleanup() {
+  # Use environment variable or default to "staging"
+  local env="${TF_VAR_environment:-staging}"
+  log "Starting forced cleanup for environment: $env"
+
+  local name_prefix="agentops-${env}"
+  local cluster_name="${name_prefix}-cluster"
+  local asg_name="${cluster_name}-asg"
+  local lt_name="${cluster_name}-lt"
+
+  # ----------------------------------------------------------------------
+  # 1. ECS Services – force delete to bypass stuck DRAINING state
+  # ----------------------------------------------------------------------
+  log "Scaling down ECS services..."
+  aws ecs update-service --cluster "$cluster_name" --service "${cluster_name}-agent" \
+    --desired-count 0 --force-new-deployment 2>/dev/null || true
+  aws ecs update-service --cluster "$cluster_name" --service "${cluster_name}-mcp" \
+    --desired-count 0 --force-new-deployment 2>/dev/null || true
+  sleep 20
+
+  log "Deleting ECS services (force)..."
+  aws ecs delete-service --cluster "$cluster_name" --service "${cluster_name}-agent" \
+    --force 2>/dev/null || true
+  aws ecs delete-service --cluster "$cluster_name" --service "${cluster_name}-mcp" \
+    --force 2>/dev/null || true
+  sleep 20
+
+  # ----------------------------------------------------------------------
+  # 2. Disassociate capacity provider from cluster
+  #    This is the missing step that caused DELETE_FAILED for the cp.
+  # ----------------------------------------------------------------------
+  log "Removing capacity provider from cluster strategy..."
+  aws ecs put-cluster-capacity-providers --cluster "$cluster_name" \
+    --capacity-providers "[]" --default-capacity-provider-strategy "[]" 2>/dev/null || true
+  sleep 10
+
+  # ----------------------------------------------------------------------
+  # 3. Now delete the capacity provider (now disassociated)
+  # ----------------------------------------------------------------------
+  log "Deleting capacity provider..."
+  aws ecs delete-capacity-provider --capacity-provider "${cluster_name}-cp" 2>/dev/null || true
+  sleep 5
+
+  # ----------------------------------------------------------------------
+  # 4. Delete the cluster (now no longer referencing the cp)
+  # ----------------------------------------------------------------------
+  log "Deleting ECS cluster..."
+  aws ecs delete-cluster --cluster "$cluster_name" 2>/dev/null || true
+  sleep 5
+
+  # ----------------------------------------------------------------------
+  # 5. Auto Scaling Group – force delete even with instances
+  # ----------------------------------------------------------------------
+  log "Deleting Auto Scaling Group (force)..."
+  aws autoscaling delete-auto-scaling-group --auto-scaling-group-name "$asg_name" \
+    --force-delete 2>/dev/null || true
+
+  # ----------------------------------------------------------------------
+  # 6. Launch Template
+  # ----------------------------------------------------------------------
+  log "Deleting launch template..."
+  aws ec2 delete-launch-template --launch-template-name "$lt_name" 2>/dev/null || true
+
+  # ----------------------------------------------------------------------
+  # 7. Internet Gateway – detach then delete
+  # ----------------------------------------------------------------------
+  local vpc_id
+  vpc_id=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=${name_prefix}-vpc" \
+    --query "Vpcs[0].VpcId" --output text 2>/dev/null)
+
+  if [ -n "$vpc_id" ] && [ "$vpc_id" != "None" ]; then
+    local igw_id
+    igw_id=$(aws ec2 describe-internet-gateways --filters "Name=attachment.vpc-id,Values=$vpc_id" \
+      --query "InternetGateways[0].InternetGatewayId" --output text 2>/dev/null)
+
+    if [ -n "$igw_id" ] && [ "$igw_id" != "None" ]; then
+      log "Detaching and deleting IGW: $igw_id"
+      aws ec2 detach-internet-gateway --internet-gateway-id "$igw_id" --vpc-id "$vpc_id" 2>/dev/null || true
+      aws ec2 delete-internet-gateway --internet-gateway-id "$igw_id" 2>/dev/null || true
+    fi
   fi
+
+  log "Force cleanup completed."
 }
 
 list_state_versions() {
@@ -341,9 +462,8 @@ rollback_state_version() {
 }
 
 init_backend() {
-  ensure_bucket_exists_and_versioning "$STATE_BUCKET" "$AWS_REGION"
-  # No DynamoDB table creation – locking handled by S3 native lockfile
-  exec_and_log "tofu-init" bash -c "cd \"$STACK_DIR\" && tofu init -backend-config \"bucket=${STATE_BUCKET}\" -backend-config \"key=${STATE_KEY}\" -backend-config \"region=${AWS_REGION}\" -backend-config \"use_lockfile=true\" -input=false"
+  ensure_bucket_exists_and_versioning "$STATE_BUCKET" "$TF_VAR_region"
+  exec_and_log "tofu-init" bash -c "cd \"$STACK_DIR\" && tofu init -backend-config \"bucket=${STATE_BUCKET}\" -backend-config \"key=${STATE_KEY}\" -backend-config \"region=${TF_VAR_region}\" -backend-config \"use_lockfile=true\" -input=false"
 }
 
 case "$MODE" in
@@ -366,11 +486,12 @@ case "$MODE" in
       exit 3
     fi
     init_backend
+    force_cleanup   # no argument – reads TF_VAR_environment internally
     destroy_auto
     ;;
   --validate)
     init_backend   # ensures bucket exists and runs tofu init once
-    validate_backend "$STATE_BUCKET" "$STATE_KEY" "$AWS_REGION"
+    validate_backend "$STATE_BUCKET" "$STATE_KEY" "$TF_VAR_region"
     ;;
   --find-version)
     list_state_versions "$STATE_BUCKET" "$STATE_KEY"
