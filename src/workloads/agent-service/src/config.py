@@ -1,6 +1,7 @@
 """
 Centralised configuration for the Agent Service.
-All settings are read from environment variables - no .env file dependency.
+All secrets are loaded from SSM Parameter Store at startup.
+No .env file dependency — env vars are only used for SSM override in dev.
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ log = logging.getLogger("agent-service.config")
 
 
 class Settings(BaseSettings):
-    """Application settings loaded from environment variables only."""
+    """Application settings — defaults only, overridden by SSM."""
 
     model_config = SettingsConfigDict(
         env_file=None,
@@ -63,7 +64,7 @@ class Settings(BaseSettings):
     service_version: str = "1.0.0"
     deployment_environment: str = "local"
 
-    # -- Auth (OIDC) -------------------------------------------------
+    # -- Auth (OIDC) — loaded from SSM at startup -------------------
     jwt_alg: str = "ES256"
     jwt_kid: str = "agentops-jwt-key"
     jwt_private_key_pem: str = ""
@@ -86,52 +87,48 @@ class Settings(BaseSettings):
 settings = Settings()
 
 
-def _load_ssm_parameter(name: str, decrypt: bool = False) -> str | None:
-    """Fetch a parameter from SSM Parameter Store, returning None on failure."""
-    try:
-        ssm = boto3.client("ssm", region_name=settings.aws_region)
-        resp = ssm.get_parameter(Name=name, WithDecryption=decrypt)
-        return resp["Parameter"]["Value"]
-    except Exception as exc:
-        log.debug("SSM parameter %s not available: %s", name, exc)
-        return None
+def _fetch_ssm(name: str, decrypt: bool = False) -> str:
+    """Fetch a single SSM parameter. Raises if not found."""
+    ssm = boto3.client("ssm", region_name=settings.aws_region)
+    resp = ssm.get_parameter(Name=name, WithDecryption=decrypt)
+    return resp["Parameter"]["Value"]
 
 
 @lru_cache(maxsize=1)
 def load_ssm_parameters() -> None:
     """
-    Populate empty settings from SSM Parameter Store.
-    Called once at startup; values already set via env vars are NOT overwritten.
+    ALWAYS fetch secrets from SSM and override settings.
+    This catches missing/invalid parameters at startup — no silent fallbacks.
     """
-    overrides: dict[str, str | set[str]] = {}
+    if settings.deployment_environment == "local" and settings.jwt_private_key_pem:
+        log.info("Skipping SSM load — jwt_private_key_pem already set via env")
+        return
 
-    def _apply(key: str, ssm_name: str, decrypt: bool = False) -> None:
-        current = getattr(settings, key, None)
-        if current is not None and current != "" and current != set():
-            return  # already set via env
-        value = _load_ssm_parameter(ssm_name, decrypt=decrypt)
-        if value is not None:
-            overrides[key] = value
+    log.info("Loading secrets from SSM Parameter Store...")
 
-    _apply("jwt_private_key_pem", "/agentops/jwt-private-key-pem", decrypt=True)
-    _apply("jwt_kid", "/agentops/jwt-kid")
-    _apply("session_secret", "/agentops/session-secret", decrypt=True)
-    _apply("google_client_id", "/agentops/google-client-id", decrypt=True)
-    _apply("google_client_secret", "/agentops/google-client-secret", decrypt=True)
-    _apply("microsoft_client_id", "/agentops/microsoft-client-id", decrypt=True)
-    _apply("microsoft_client_secret", "/agentops/microsoft-client-secret", decrypt=True)
-    _apply("ms_tenant_id", "/agentops/ms-tenant-id")
+    ssm_params = [
+        ("jwt_private_key_pem", "/agentops/jwt-private-key-pem", True),
+        ("jwt_kid", "/agentops/jwt-kid", False),
+        ("session_secret", "/agentops/session-secret", True),
+        ("google_client_id", "/agentops/google-client-id", True),
+        ("google_client_secret", "/agentops/google-client-secret", True),
+        ("microsoft_client_id", "/agentops/microsoft-client-id", True),
+        ("microsoft_client_secret", "/agentops/microsoft-client-secret", True),
+        ("ms_tenant_id", "/agentops/ms-tenant-id", False),
+        ("admin_allowed_google_domains", "/agentops/admin-allowed-google-domains", False),
+        ("admin_allowed_microsoft_tenants", "/agentops/admin-allowed-microsoft-tenants", False),
+    ]
 
-    # Allowed admin domains / tenants
-    _apply("admin_allowed_google_domains", "/agentops/admin-allowed-google-domains")
-    _apply("admin_allowed_microsoft_tenants", "/agentops/admin-allowed-microsoft-tenants")
-
-    for k, v in overrides.items():
-        if k in ("admin_allowed_google_domains", "admin_allowed_microsoft_tenants"):
-            # SSM returns comma-separated strings; convert to set
-            if isinstance(v, str):
-                v = {s.strip().lower() for s in v.split(",") if s.strip()}
-        setattr(settings, k, v)
+    for key, ssm_name, decrypt in ssm_params:
+        try:
+            value = _fetch_ssm(ssm_name, decrypt=decrypt)
+            if key in ("admin_allowed_google_domains", "admin_allowed_microsoft_tenants"):
+                value = {s.strip().lower() for s in value.split(",") if s.strip()}
+            setattr(settings, key, value)
+            log.info("  Loaded %s from %s", key, ssm_name)
+        except Exception as exc:
+            log.error("  FAILED to load %s from %s: %s", key, ssm_name, exc)
+            raise RuntimeError(f"Missing SSM parameter: {ssm_name}") from exc
 
 
 def create_safeguard_lm() -> dspy.LM:

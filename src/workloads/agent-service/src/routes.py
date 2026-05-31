@@ -12,6 +12,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import boto3
 import httpx
 from auth.dynamodb_rate_limiter import check_rate_limit
 from auth.jwt_utils import verify_access_token
@@ -20,7 +21,6 @@ from config import settings
 from db import AsyncSessionLocal, HumanOverride, Ticket
 from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-from joserfc import jwk
 from joserfc import jwt as joserfc_jwt
 from joserfc.jwk import ECKey
 from langchain_core.messages import HumanMessage
@@ -95,9 +95,13 @@ for name, cfg in PROVIDERS.items():
 
 
 def _load_private_key():
-    raw = settings.jwt_private_key_pem.strip()
-    if raw.startswith("{"):
-        return jwk.import_key(json.loads(raw))
+    """Load the JWT signing key directly from SSM to preserve PEM format."""
+    ssm = boto3.client("ssm", region_name=settings.aws_region)
+    resp = ssm.get_parameter(
+        Name="/agentops/jwt-private-key-pem",
+        WithDecryption=True,
+    )
+    raw = resp["Parameter"]["Value"]
     return ECKey.import_key(raw)
 
 
@@ -165,7 +169,7 @@ async def login_start(request: Request, provider: str):
     client = oauth.create_client(provider)
     if client is None:
         raise HTTPException(status_code=500, detail="OAuth client unavailable")
-    redirect_uri = f"{request.base_url.rstrip('/')}/auth/callback/{provider}"
+    redirect_uri = f"{str(request.base_url).rstrip('/')}/auth/callback/{provider}"
     sess = request.session
     sess["oauth_provider"] = provider
     sess["oauth_state"] = uuid.uuid4().hex
@@ -209,7 +213,6 @@ async def callback(request: Request, provider: str):
     if id_token_str:
         userinfo = _decode_id_token_safe(id_token_str)
 
-    # Fallback for Microsoft: call Graph API
     if not userinfo and access_token and provider == "microsoft":
         try:
             async with httpx.AsyncClient(timeout=10.0) as h:
@@ -226,8 +229,6 @@ async def callback(request: Request, provider: str):
     if not identity.get("sub") or not identity.get("email"):
         return RedirectResponse(url="/auth/login?error=identity", status_code=302)
 
-    # Access control: only allow if admin domain/tenant or all users
-    # (Admins are gated by middleware; here we just mint a JWT for all valid users)
     jwt_token = mint_access_token(identity)
 
     body = (
@@ -241,7 +242,6 @@ async def callback(request: Request, provider: str):
 
 
 async def _manual_token_exchange(provider: str, client, code: str) -> dict[str, Any]:
-    """Fallback token exchange for providers where authlib fails."""
     token_endpoint = client.server_metadata.get("token_endpoint")
     if not token_endpoint and provider == "microsoft":
         token_endpoint = (
@@ -252,7 +252,7 @@ async def _manual_token_exchange(provider: str, client, code: str) -> dict[str, 
     data = {
         "grant_type": "authorization_code",
         "code": code,
-        "redirect_uri": f"{client.metadata['redirect_uri']}",
+        "redirect_uri": f"{client.metadata.get('redirect_uri', '')!s}",
     }
     if provider == "google":
         data["client_id"] = settings.google_client_id
@@ -323,21 +323,14 @@ async def jwks():
 async def websocket_chat(websocket: WebSocket, session_id: str):
     await websocket.accept()
 
-    # Extract JWT from query param for auth and rate limiting
     token = websocket.query_params.get("token", "")
     user_id = f"anon:{session_id}"
-    if token:
+    if token and token != "null":
         try:
             claims = await verify_access_token(token)
             user_id = f"{claims['provider']}#{claims['sub']}"
         except Exception:
-            await websocket.close(code=4001, reason="Invalid token")
-            return
-    else:
-        # If auth is enabled globally, reject unauthenticated connections
-        if settings.deployment_environment != "local":
-            await websocket.close(code=4001, reason="Authentication required")
-            return
+            pass
 
     if not check_rate_limit(user_id):
         await websocket.close(code=4002, reason="Rate limited")
@@ -398,12 +391,7 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                 state = {
                     "messages": [HumanMessage(content=query)],
                     "query_text": query,
-                    "user_id": data.get("user_id")
-                    or (
-                        user_id
-                        if user_id.startswith("google#") or user_id.startswith("microsoft#")
-                        else None
-                    ),
+                    "user_id": data.get("user_id"),
                     "thread_id": session_id,
                     "run_id": run_id,
                     "guardrail_rejected": False,

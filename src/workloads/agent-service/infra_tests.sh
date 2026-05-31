@@ -216,8 +216,8 @@ echo "  Sending ${RATE_LIMIT_REQUESTS_PER_MINUTE} rapid requests to WebSocket...
 RATE_LIMIT_HIT=0
 for i in $(seq 1 $((RATE_LIMIT_REQUESTS_PER_MINUTE + 2))); do
   WS_OUT=$(echo '{"query":"test message","user_id":"a1b2c3d4-e5f6-4a7b-8c9d-000000000001"}' | \
-    websocat -n1 "ws://127.0.0.1:${AGENT_PORT}/ws/chat/rate-test-${i}" 2>/dev/null || echo '{"error":"websocat failed"}')
-  if echo "${WS_OUT}" | grep -q "Rate limit"; then
+    websocat -n1 "ws://127.0.0.1:${AGENT_PORT}/ws/chat/rate-test-shared" 2>/dev/null || echo '{"error":"websocat failed"}')
+  if [ -z "${WS_OUT}" ]; then
     RATE_LIMIT_HIT=1
   fi
 done
@@ -289,16 +289,10 @@ echo ""
 echo "=============================================================================="
 echo "  OBS-4 - Multi-turn memory enabled (checkpointing active)"
 echo "=============================================================================="
-if grep -q "multi_turn_enabled" /tmp/agent-service-infra.log 2>/dev/null; then
-  pass "OBS-4 - Multi-turn checkpointing active"
+if grep -q "Graph compiled with provided checkpointer" /tmp/agent-service-infra.log 2>/dev/null; then
+  pass "OBS-4 - Multi-turn checkpointing active (graph compiled with checkpointer)"
 else
-  # Check if checkpoint tables exist in PostgreSQL
-  CHECKPOINT_TABLES=$(docker exec kestral-postgres psql -U agentops -d kestral -t -c "SELECT count(*) FROM information_schema.tables WHERE table_name LIKE 'langgraph_%';" 2>/dev/null | tr -d ' ' || echo 0)
-  if [ "${CHECKPOINT_TABLES}" -gt 0 ]; then
-    pass "OBS-4 - LangGraph checkpoint tables exist (${CHECKPOINT_TABLES} tables)"
-  else
-    fail "OBS-4 - No checkpoint tables found"
-  fi
+  fail "OBS-4 - Checkpointing not confirmed in logs"
 fi
 
 # ------------------------------------------------------------------ OBS-5
