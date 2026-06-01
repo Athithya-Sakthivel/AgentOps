@@ -14,6 +14,7 @@
 #   export GOOGLE_CLIENT_SECRET="..."
 #   export MICROSOFT_CLIENT_ID="..."
 #   export MICROSOFT_CLIENT_SECRET="..."
+#   export DOMAIN=athithya.site
 #   bash src/infra/scripts/ssm-put.sh
 # =============================================================================
 set -euo pipefail
@@ -109,13 +110,23 @@ aws ssm put-parameter \
     --overwrite \
     --region "${AWS_REGION}" > /dev/null
 
-# Microsoft tenant ID (plain string, no special characters)
-MS_TENANT_ID="${MS_TENANT_ID:-common}"
+# Microsoft tenant ID — fail fast, never default to "common"
+: "${MICROSOFT_TENANT_ID:?MICROSOFT_TENANT_ID must be set (Azure tenant GUID)}"
 echo "  [CREATE] /agentops/ms-tenant-id (String)"
 aws ssm put-parameter \
     --name "${PREFIX}/ms-tenant-id" \
     --type String \
-    --value "${MS_TENANT_ID}" \
+    --value "${MICROSOFT_TENANT_ID}" \
+    --overwrite \
+    --region "${AWS_REGION}" > /dev/null
+
+# ── Domain ───────────────────────────────────────────────────────
+: "${DOMAIN:?DOMAIN must be set (e.g., athithya.site or localhost:8000)}"
+echo "  [CREATE] /agentops/domain (String)"
+aws ssm put-parameter \
+    --name "${PREFIX}/domain" \
+    --type String \
+    --value "${DOMAIN}" \
     --overwrite \
     --region "${AWS_REGION}" > /dev/null
 
@@ -132,7 +143,7 @@ echo "  [CREATE] /agentops/admin-allowed-microsoft-tenants (StringList)"
 aws ssm put-parameter \
     --name "${PREFIX}/admin-allowed-microsoft-tenants" \
     --type StringList \
-    --value "${MS_TENANT_ID}" \
+    --value "${MICROSOFT_TENANT_ID}" \
     --overwrite \
     --region "${AWS_REGION}" > /dev/null
 

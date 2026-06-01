@@ -93,6 +93,12 @@ for name, cfg in PROVIDERS.items():
         client_kwargs=cfg["client_kwargs"],
     )
 
+REDIRECT_URI_BASE = (
+    f"https://{settings.domain}"
+    if settings.domain and "localhost" not in settings.domain
+    else f"http://{settings.domain}"
+)
+
 
 def _load_private_key():
     """Load the JWT signing key directly from SSM to preserve PEM format."""
@@ -169,7 +175,9 @@ async def login_start(request: Request, provider: str):
     client = oauth.create_client(provider)
     if client is None:
         raise HTTPException(status_code=500, detail="OAuth client unavailable")
-    redirect_uri = f"{str(request.base_url).rstrip('/')}/auth/callback/{provider}"
+
+    redirect_uri = f"{REDIRECT_URI_BASE}/auth/callback/{provider}"
+
     sess = request.session
     sess["oauth_provider"] = provider
     sess["oauth_state"] = uuid.uuid4().hex
@@ -249,11 +257,13 @@ async def _manual_token_exchange(provider: str, client, code: str) -> dict[str, 
         )
     if not token_endpoint:
         return {}
+
     data = {
         "grant_type": "authorization_code",
         "code": code,
-        "redirect_uri": f"{client.metadata.get('redirect_uri', '')!s}",
+        "redirect_uri": f"{REDIRECT_URI_BASE}/auth/callback/{provider}",
     }
+
     if provider == "google":
         data["client_id"] = settings.google_client_id
         if settings.google_client_secret:
@@ -262,6 +272,7 @@ async def _manual_token_exchange(provider: str, client, code: str) -> dict[str, 
         data["client_id"] = settings.microsoft_client_id
         if settings.microsoft_client_secret:
             data["client_secret"] = settings.microsoft_client_secret
+
     try:
         async with httpx.AsyncClient(timeout=15.0) as h:
             resp = await h.post(token_endpoint, data=data, headers={"Accept": "application/json"})

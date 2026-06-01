@@ -76,9 +76,10 @@ class Settings(BaseSettings):
     google_client_secret: str = ""
     microsoft_client_id: str = ""
     microsoft_client_secret: str = ""
-    ms_tenant_id: str = "common"
+    ms_tenant_id: str = ""
     admin_allowed_google_domains: str = ""
     admin_allowed_microsoft_tenants: str = ""
+    domain: str = ""  # loaded from SSM, e.g., "athithya.site"
 
     # -- Rate Limiting ------------------------------------------------
     rate_limit_enabled: bool = True
@@ -118,6 +119,7 @@ def load_ssm_parameters() -> None:
         ("google_client_id", "google-client-id", True),
         ("google_client_secret", "google-client-secret", True),
         ("microsoft_client_id", "microsoft-client-id", True),
+        ("domain", "domain", False),
         ("microsoft_client_secret", "microsoft-client-secret", True),
         ("ms_tenant_id", "ms-tenant-id", False),
         ("admin_allowed_google_domains", "admin-allowed-google-domains", False),

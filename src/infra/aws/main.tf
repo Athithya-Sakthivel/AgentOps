@@ -53,6 +53,29 @@ module "dynamodb" {
   tags               = var.tags
 }
 
+
+
+# ----------------------------------------------------------------------
+# RDS INSTANCE
+# ----------------------------------------------------------------------
+# ----------------------------------------------------------------------
+# RDS (PostgreSQL) – optional
+# ----------------------------------------------------------------------
+module "rds" {
+  source = "./modules/rds"
+
+  create_rds         = var.create_rds
+  name_prefix        = var.name_prefix
+  environment        = var.environment
+  vpc_id             = module.vpc.vpc_id
+  private_subnet_ids = module.vpc.private_subnet_ids
+  security_group_id  = module.security_groups.rds_security_group_id
+  db_name            = "kestral"
+  db_username        = "agentops"
+  db_password        = var.db_password
+  tags               = var.tags
+}
+
 # ----------------------------------------------------------------------
 # ECR REPOSITORIES
 # ----------------------------------------------------------------------
@@ -178,24 +201,6 @@ module "observability" {
   retention_in_days   = var.environment == "prod" ? 30 : 7
   alarm_sns_topic_arn = var.alarm_sns_topic_arn
   tags                = var.tags
-}
-
-# ----------------------------------------------------------------------
-# RDS (PostgreSQL) – optional
-# ----------------------------------------------------------------------
-module "rds" {
-  source = "./modules/rds"
-
-  create_rds         = var.create_rds
-  name_prefix        = var.name_prefix
-  environment        = var.environment
-  vpc_id             = module.vpc.vpc_id
-  private_subnet_ids = module.vpc.private_subnet_ids
-  security_group_id  = module.security_groups.rds_security_group_id
-  db_name            = "kestral"
-  db_username        = "agentops"
-  db_password        = var.db_password
-  tags               = var.tags
 }
 
 # ----------------------------------------------------------------------

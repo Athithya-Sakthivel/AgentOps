@@ -59,16 +59,16 @@ if [ -z "${TF_VAR_cloudflare_tunnel_token:-}" ]; then
 fi
 
 # ---- RDS (disabled in staging to save cost) ----
-export TF_VAR_create_rds="${TF_VAR_create_rds:-false}"
-export TF_VAR_db_password="${TF_VAR_db_password:-}"                     # leave empty – Terraform generates random password
+export TF_VAR_create_rds="${TF_VAR_create_rds:-true}"
+export TF_VAR_db_password="${TF_VAR_db_password:-SecurePass123!}"  # or leave empty – Terraform generates random password
 
 # ---- Budget & Alerts ----
 export TF_VAR_monthly_budget_amount="${TF_VAR_monthly_budget_amount:-100}"
 export TF_VAR_alert_emails="${TF_VAR_alert_emails:-[\"athithya651@gmail.com\"]}"
-export TF_VAR_alarm_sns_topic_arn="${TF_VAR_alarm_sns_topic_arn:-}"    # optional – set if you have an SNS topic
+export TF_VAR_alarm_sns_topic_arn="${TF_VAR_alarm_sns_topic_arn:-arn:aws:sns:ap-south-1:681802563986:agentops-staging-alarms}"   
 
 # ---- ECS Flag (deploy ECS cluster and services) ----
-export TF_VAR_enable_ecs="${TF_VAR_enable_ecs:-true}"
+export TF_VAR_enable_ecs="${TF_VAR_enable_ecs:-false}"
 
 # ----------------------------------------------------------------------
 # Helper functions

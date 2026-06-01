@@ -3,84 +3,133 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Kestral — Support</title>
+  <title>Kestral — Online Shopping</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css">
 </head>
-<body class="landing">
-  <nav class="nav">
-    <div class="nav-inner">
+<body>
+  <!-- NAVIGATION -->
+  <nav class="navbar">
+    <div class="nav-container">
       <a href="/" class="nav-brand">
         <span class="brand-icon">🏪</span>
-        <span class="brand-text">Kestral</span>
+        <span>Kestral</span>
       </a>
-      <div class="nav-links">
-        <a href="/chat.html" class="nav-link">Support</a>
+      <div class="nav-search">
+        <input type="text" placeholder="Search products, brands..." disabled>
+        <button disabled>🔍</button>
+      </div>
+      <div class="nav-actions">
+        <a href="#" class="nav-icon" title="Account">👤</a>
+        <a href="#" class="nav-icon" title="Wishlist">♡</a>
+        <a href="#" class="nav-icon cart-icon" title="Cart">
+          🛒<span class="cart-badge">0</span>
+        </a>
       </div>
     </div>
   </nav>
 
-  <main class="hero">
-    <div class="hero-content">
-      <h1 class="hero-title">We're here to help</h1>
-      <p class="hero-subtitle">Get instant support from our AI assistant. Check orders, request refunds, track deliveries, and more — all in one place.</p>
+  <!-- MAIN CONTENT -->
+  <main>
+    <!-- Hero Banner -->
+    <section class="hero">
+      <div class="hero-content">
+        <h1>Summer Sale is Live!</h1>
+        <p>Up to 50% off on electronics, fashion & more.</p>
+        <button class="btn btn-primary" disabled>Shop Now</button>
+      </div>
+    </section>
 
-      <div id="logged-out" class="auth-card">
-        <h2 class="auth-title">Sign in to continue</h2>
-        <p class="auth-hint">Use your Google or Microsoft account</p>
-        <div class="auth-buttons">
-          <a href="/auth/login" class="btn btn-google">
-            <svg class="btn-icon" viewBox="0 0 24 24"><path fill="#EA4335" d="M12 10.2v3.6h5.2c-.2 1.2-1.4 3.6-5.2 3.6-3.1 0-5.6-2.6-5.6-5.8S8.9 6.8 12 6.8c1.8 0 2.9.8 3.6 1.5l2.4-2.3C17.2 4 14.8 3 12 3 7.6 3 4 6.6 4 11s3.6 8 8 8c4.6 0 7-3.2 7-7.7 0-.5 0-.9-.1-1.1H12z"/></svg>
-            <span>Continue with Google</span>
-          </a>
-          <a href="/auth/login/start/microsoft" class="btn btn-microsoft">
-            <svg class="btn-icon" viewBox="0 0 24 24"><rect x="2" y="2" width="9" height="9" fill="#F35325"/><rect x="13" y="2" width="9" height="9" fill="#81BC06"/><rect x="2" y="13" width="9" height="9" fill="#05A6F0"/><rect x="13" y="13" width="9" height="9" fill="#FFBA08"/></svg>
-            <span>Continue with Microsoft</span>
-          </a>
+    <!-- Categories -->
+    <section class="categories">
+      <h2>Shop by Category</h2>
+      <div class="category-grid">
+        <div class="category-card">📱<br>Electronics</div>
+        <div class="category-card">👗<br>Fashion</div>
+        <div class="category-card">🏠<br>Home & Kitchen</div>
+        <div class="category-card">💄<br>Beauty</div>
+        <div class="category-card">🏃<br>Sports</div>
+        <div class="category-card">📚<br>Books</div>
+      </div>
+    </section>
+
+    <!-- Featured Products -->
+    <section class="featured">
+      <h2>Featured Products</h2>
+      <div class="product-grid">
+        <div class="product-card">
+          <div class="product-img">📱</div>
+          <h3>Samsung Galaxy S25 Ultra</h3>
+          <p class="price">₹1,24,999</p>
+          <button class="btn btn-outline" disabled>Add to Cart</button>
+        </div>
+        <div class="product-card">
+          <div class="product-img">💻</div>
+          <h3>MacBook Pro M4</h3>
+          <p class="price">₹1,99,999</p>
+          <button class="btn btn-outline" disabled>Add to Cart</button>
+        </div>
+        <div class="product-card">
+          <div class="product-img">🎧</div>
+          <h3>Sony WH-1000XM6</h3>
+          <p class="price">₹29,999</p>
+          <button class="btn btn-outline" disabled>Add to Cart</button>
+        </div>
+        <div class="product-card">
+          <div class="product-img">👟</div>
+          <h3>Nike Air Max 2026</h3>
+          <p class="price">₹14,999</p>
+          <button class="btn btn-outline" disabled>Add to Cart</button>
+        </div>
+        <div class="product-card">
+          <div class="product-img">📷</div>
+          <h3>Canon EOS R6 Mark II</h3>
+          <p class="price">₹2,49,999</p>
+          <button class="btn btn-outline" disabled>Add to Cart</button>
+        </div>
+        <div class="product-card">
+          <div class="product-img">⌚</div>
+          <h3>Apple Watch Series 10</h3>
+          <p class="price">₹49,999</p>
+          <button class="btn btn-outline" disabled>Add to Cart</button>
         </div>
       </div>
-
-      <div id="logged-in" class="auth-card hidden">
-        <div class="user-profile">
-          <div class="user-avatar" id="user-avatar"></div>
-          <div>
-            <div class="user-name" id="user-name"></div>
-            <div class="user-email" id="user-email"></div>
-          </div>
-        </div>
-        <div class="auth-buttons">
-          <a href="/chat.html" class="btn btn-primary">💬 Open Support Chat</a>
-          <a href="/admin.html" class="btn btn-admin hidden" id="admin-link">📊 Admin Dashboard</a>
-        </div>
-        <button onclick="logout()" class="btn btn-ghost">Sign Out</button>
-      </div>
-    </div>
+    </section>
   </main>
 
+  <!-- FOOTER -->
   <footer class="footer">
-    <p>&copy; 2026 Kestral Commerce. All rights reserved.</p>
+    <div class="footer-content">
+      <div class="footer-links">
+        <a href="#">About Us</a>
+        <a href="#">Contact</a>
+        <a href="#">Privacy Policy</a>
+        <a href="#">Terms of Service</a>
+      </div>
+      <div class="footer-admin">
+        <a href="/admin" class="admin-gear" title="Admin">⚙️</a>
+      </div>
+    </div>
+    <p class="copyright">© 2026 Kestral Commerce. All rights reserved.</p>
   </footer>
 
+  <!-- FLOATING SUPPORT WIDGET -->
+  <div id="support-widget" class="support-widget">
+    <button id="support-toggle" class="support-toggle" title="Need help?">
+      💬
+    </button>
+    <div id="support-panel" class="support-panel hidden">
+      <div class="panel-header">
+        <span>Kestral Support</span>
+        <button id="panel-close" class="panel-close">✕</button>
+      </div>
+      <div id="panel-content" class="panel-content">
+        <!-- login state or chat -->
+      </div>
+    </div>
+  </div>
+
   <script src="/app.js"></script>
-  <script>
-    async function init() {
-      const token = localStorage.getItem('app_jwt');
-      if (!token) { document.getElementById('logged-out').classList.remove('hidden'); return; }
-      try {
-        const resp = await fetch('/auth/me', { headers: { 'Authorization': 'Bearer ' + token } });
-        if (!resp.ok) throw new Error('invalid');
-        const data = await resp.json();
-        document.getElementById('logged-out').classList.add('hidden');
-        document.getElementById('logged-in').classList.remove('hidden');
-        document.getElementById('user-name').textContent = data.user.name || 'Customer';
-        document.getElementById('user-email').textContent = data.user.email || '';
-        document.getElementById('user-avatar').textContent = (data.user.name || 'U')[0].toUpperCase();
-        const domain = (data.user.email || '').split('@')[1] || '';
-        if (domain === 'gmail.com') document.getElementById('admin-link').classList.remove('hidden');
-      } catch (e) { localStorage.removeItem('app_jwt'); window.location.reload(); }
-    }
-    init();
-  </script>
 </body>
 </html>

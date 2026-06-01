@@ -1,23 +1,17 @@
 #!/bin/bash
 # =============================================================================
-# AgentOps — Local Cloudflared Tunnel Setup (YAML Config, Reproducible)
+# AgentOps — Local Cloudflared Tunnel Setup (Run Existing Tunnel)
 # =============================================================================
 # Prerequisites:
-#   1. CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_GLOBAL_API_KEY exported
-#   2. OpenTofu installed (tofu)
-#   3. cloudflared installed
-#   4. agent-service running on http://localhost:8000
+#   1. Cloudflare resources already created via OpenTofu (src/infra/cloudflare)
+#   2. cloudflared installed
+#   3. agent-service running on http://localhost:8000
 #
 # Usage:
-#   export CLOUDFLARE_ACCOUNT_ID=xxx
-#   export CLOUDFLARE_GLOBAL_API_KEY=xxx
 #   bash src/offline/cloudflared_setup.sh
 # =============================================================================
 set -euo pipefail
 
-: "${CLOUDFLARE_ACCOUNT_ID:?export CLOUDFLARE_ACCOUNT_ID first}"
-: "${CLOUDFLARE_GLOBAL_API_KEY:?export CLOUDFLARE_GLOBAL_API_KEY first}"
-export CLOUDFLARE_EMAIL="${CLOUDFLARE_EMAIL:-athithya651@gmail.com}"
 DOMAIN="${DOMAIN:-athithya.site}"
 AGENT_PORT="${AGENT_PORT:-8000}"
 
@@ -30,68 +24,80 @@ if ! curl -sf --max-time 2 "http://localhost:${AGENT_PORT}/healthz" >/dev/null 2
 fi
 echo "[INFO] Agent service is reachable."
 
-# ── 2. Create/refresh Cloudflare resources (idempotent) ────────────
-echo "[INFO] Applying Cloudflare configuration..."
-bash src/infra/cloudflare/run.sh --apply
-
-# ── 3. Fetch tunnel token and ID from Terraform outputs ────────────
-TUNNEL_TOKEN="$(tofu -chdir=src/infra/cloudflare output -raw cloudflare_tunnel_token 2>/dev/null)"
+# ── 2. Fetch tunnel credentials from OpenTofu outputs ──────────────
 TUNNEL_ID="$(tofu -chdir=src/infra/cloudflare output -raw cloudflare_tunnel_id 2>/dev/null)"
+TUNNEL_TOKEN="$(tofu -chdir=src/infra/cloudflare output -raw cloudflare_tunnel_token 2>/dev/null)"
+
+if [[ -z "${TUNNEL_ID}" || "${TUNNEL_ID}" == "null" ]]; then
+  echo "[ERROR] Could not read tunnel ID from OpenTofu."
+  echo "        Run 'bash src/infra/cloudflare/run.sh --apply' first."
+  exit 1
+fi
 
 if [[ -z "${TUNNEL_TOKEN}" || "${TUNNEL_TOKEN}" == "null" ]]; then
-  echo "[ERROR] Could not read tunnel token from Terraform."
+  echo "[ERROR] Could not read tunnel token from OpenTofu."
   exit 1
 fi
 
 echo "[INFO] Tunnel ID: ${TUNNEL_ID}"
 
+# ── 3. Login to cloudflared (one-time, stores cert in ~/.cloudflared) ──
+echo "[INFO] Authenticating cloudflared..."
+cloudflared tunnel login --no-open-browser 2>/dev/null || true
+
 # ── 4. Write cloudflared config with selective ingress ─────────────
 mkdir -p ~/.cloudflared
 
-cat > ~/.cloudflared/agentops-tunnel.yml << 'YAML'
+cat > ~/.cloudflared/agentops-tunnel.yml << YAML
+tunnel: ${TUNNEL_ID}
+credentials-file: /root/.cloudflared/${TUNNEL_ID}.json
+
 ingress:
-  # Block internal endpoints
-  - hostname: athithya.site
+  # Block internal health endpoints from public access
+  - hostname: ${DOMAIN}
     path: ^/healthz$
     service: http_status:403
-  - hostname: athithya.site
+  - hostname: ${DOMAIN}
     path: ^/readyz$
     service: http_status:403
-  - hostname: athithya.site
-    path: /admin/*
-    service: http_status:403
 
-  # Auth + WebSocket + API
-  - hostname: athithya.site
+  # Auth endpoints
+  - hostname: ${DOMAIN}
     path: /auth/*
-    service: http://localhost:8000
-  - hostname: athithya.site
+    service: http://localhost:${AGENT_PORT}
+
+  # WebSocket chat
+  - hostname: ${DOMAIN}
     path: /ws/*
-    service: http://localhost:8000
+    service: http://localhost:${AGENT_PORT}
     originRequest:
       connectTimeout: "10s"
       keepAliveTimeout: "120s"
       disableChunkedEncoding: false
-  - hostname: athithya.site
-    path: /.well-known/*
-    service: http://localhost:8000
 
-  # Root (frontend)
-  - hostname: athithya.site
+  # JWKS endpoint
+  - hostname: ${DOMAIN}
+    path: /.well-known/*
+    service: http://localhost:${AGENT_PORT}
+
+  # Frontend (root)
+  - hostname: ${DOMAIN}
     path: /
-    service: http://localhost:8000
+    service: http://localhost:${AGENT_PORT}
     originRequest:
       connectTimeout: "10s"
       keepAliveTimeout: "60s"
       disableChunkedEncoding: false
 
-  # Catch-all
+  # Catch-all: reject everything else
   - service: http_status:404
 YAML
 
 echo "[INFO] Config written to ~/.cloudflared/agentops-tunnel.yml"
 
-# ── 5. Start cloudflared using the environment variable method ──────
+# ── 5. Start cloudflared with the existing tunnel ──────────────────
 echo "[INFO] Starting cloudflared tunnel → https://${DOMAIN} → localhost:${AGENT_PORT}"
-export TUNNEL_TOKEN="${TUNNEL_TOKEN}"
-cloudflared tunnel --config ~/.cloudflared/agentops-tunnel.yml run "${TUNNEL_ID}"
+echo "[INFO] Press Ctrl+C to stop."
+
+export TUNNEL_TOKEN
+cloudflared tunnel run --config ~/.cloudflared/agentops-tunnel.yml "${TUNNEL_ID}"
