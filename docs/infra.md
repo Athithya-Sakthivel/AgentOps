@@ -38,7 +38,7 @@ Both stacks are designed to be idempotent, secure, and cost‑optimised for a sm
        │  ┌─────────────────────────────────────────────────────────────┐│
        │  │ VPC: 10.20.0.0/16 (staging)                                 ││
        │  │  - Public subnets (2 AZs) with Internet Gateway             ││
-       │  │  - Private subnets (2 AZs) for RDS (optional)               ││
+       │  │  - Private subnets (2 AZs) for RDS               ││
        │  │                                                              ││
        │  │ EC2 Auto Scaling Group (ECS Managed Instances)              ││
        │  │  - 2 × t4g.small (ARM64)                                    ││
@@ -63,7 +63,7 @@ Both stacks are designed to be idempotent, secure, and cost‑optimised for a sm
        └─────────────────────────────────────────────────────────────────┘
 ```
 
-All communication between the Cloudflare Tunnel and the agent‑service happens over the host’s loopback interface (`localhost:8000`). The tunnel terminates on each EC2 instance, so no load balancer or public IP is required.
+All communication between the Cloudflare Tunnel and the agent‑service happens over the host’s loopback interface (localhost:8000). The tunnel terminates on each EC2 instance, so no load balancer or public IP is required.
 
 ---
 
@@ -74,7 +74,7 @@ All communication between the Cloudflare Tunnel and the agent‑service happens 
 - **VPC** with DNS support and hostnames enabled.
 - **Internet Gateway** attached to the VPC.
 - **Public subnets** (one per AZ) with `map_public_ip_on_launch = true` and a route to the IGW.
-- **Private subnets** (optional) for RDS; they have no direct internet access.
+- **Private subnets** for RDS; they have no direct internet access.
 - Outputs: VPC ID, public/private subnet IDs, public route table ID.
 
 ### 3.2 Security Groups (Module `security-groups`)
@@ -151,16 +151,15 @@ The `mcp-server` **does not** have a task role – it connects only to PostgreSQ
 - Two CloudWatch log groups:
   - `/ecs/<name_prefix>-agent-service`
   - `/ecs/<name_prefix>-mcp-server`
-- Retention: 7 days for staging, 30 days for production.
+- Retention: 7 days for staging, 14 days for production.
 - Metric filters (extracted from structured JSON logs):
   - `AgentRequests` – message “Message processed”
   - `WalletCredits` – message “Wallet credit issued”
   - `TicketsCreated` – message “Ticket created”
   - `Errors` – field `level = "ERROR"`
 - CloudWatch dashboard (free tier) with three widgets: agent activity (metrics), error count, recent errors log table.
-- Two alarms (conditional on `alarm_sns_topic_arn` being non‑empty):
+- One alarm (conditional on `alarm_sns_topic_arn` being non‑empty):
   - `errors-high`: >5 errors in 5 minutes
-  - `no-requests`: no agent requests for 30 minutes
 
 ### 3.9 Cost Budget (Module `budget`)
 
@@ -230,7 +229,7 @@ The script `run.sh` provides all these with sensible defaults for staging; for p
   - Always use HTTPS: `on`
   - TLS 1.3: `on`
 - **Bot Management**:
-  - Fight mode: `false` (disabled)
+  - Fight mode: `true`
   - JS detections: `true`
   - AI bots protection: `block`
   - Crawler protection: `enabled`
@@ -280,7 +279,7 @@ The glue between Cloudflare and AWS is the EC2 user‑data script (`modules/ecs-
 
 The launch template passes three variables to the templatefile: `cluster_name`, `cloudflare_tunnel_token`, and `cloudflare_hostname`. The tunnel token is obtained from the Cloudflare stack output.
 
-Because the tunnel is installed directly on each EC2 instance, traffic can reach the `agent-service` container (listening on port 8000) even though the container uses bridge networking (dynamic host port). The `cloudflared` service connects to `localhost:8000` on the same host, and the ECS agent maps the container’s port 8000 to an ephemeral host port. This works because `cloudflared` and the container share the host’s network namespace.
+> Because the tunnel is installed directly on each EC2 instance, traffic can reach the `agent-service` container (listening on port 8000) even though the container uses bridge networking. The `cloudflared` service connects to `localhost:8000` on the same host, and the ECS agent maps the container's port 8000 to the **same host port 8000** (static mapping). This works because `cloudflared` and the container share the host's network namespace. **Dynamic host ports (`hostPort = 0`) would break this setup** because `cloudflared` expects a fixed port.
 
 ---
 
@@ -443,11 +442,8 @@ src/infra/
 │   └── .plans/
 └── cloudflare/
     ├── main.tf
-    ├── variables.tf
-    ├── outputs.tf
     ├── run.sh
-    ├── README.md
-    └── tfplan
+    └── README.md
 ```
 
 All modules are self‑contained, and the root configuration passes variables via `TF_VAR_*` exclusively.
@@ -457,6 +453,4 @@ All modules are self‑contained, and the root configuration passes variables vi
 ## 12. Future Improvements
 
 - **Secrets Manager for RDS password** with automatic rotation (requires Lambda).
-- **Enable cloudflare bot/js protection** currently disabled
-
 ---

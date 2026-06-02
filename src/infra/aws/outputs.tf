@@ -60,11 +60,13 @@ output "ecr_repositories" {
 
 
 output "ecs_cluster_id" {
-  value = module.ecs_cluster.cluster_id
+  value = var.enable_ecs ? module.ecs_cluster[0].cluster_id : null
 }
+
 output "agent_service_name" {
-  value = module.ecs_services.agent_service_name
+  value = var.enable_ecs ? module.ecs_services[0].agent_service_name : null
 }
+
 output "mcp_service_name" {
-  value = module.ecs_services.mcp_service_name
+  value = var.enable_ecs ? module.ecs_services[0].mcp_service_name : null
 }

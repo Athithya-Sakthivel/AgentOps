@@ -84,6 +84,12 @@ variable "db_password" {
   default     = null
 }
 
+variable "enable_ecs" {
+  description = "Deploy ECS cluster and services (set to true for both staging and prod)"
+  type        = bool
+  default     = true
+}
+
 variable "alarm_sns_topic_arn" {
   description = "SNS topic ARN for CloudWatch alarms (optional)"
   type        = string

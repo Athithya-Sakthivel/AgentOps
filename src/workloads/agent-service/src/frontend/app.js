@@ -19,6 +19,11 @@ async function getUser() {
   }
 }
 
+function escapeHtml(str) {
+  const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+  return String(str).replace(/[&<>"']/g, c => map[c]);
+}
+
 // ---------- Support Widget ----------
 document.addEventListener('DOMContentLoaded', async () => {
   const toggle = document.getElementById('support-toggle');
@@ -40,12 +45,18 @@ document.addEventListener('DOMContentLoaded', async () => {
   async function renderPanel() {
     const user = await getUser();
     if (user) {
-      // Show chat interface
       panelContent.innerHTML = `
+        <div class="widget-header">
+          <span class="widget-user">👤 ${escapeHtml(user.name || user.email)}</span>
+          <div class="widget-actions">
+            <a href="/chat.html" target="_blank" class="widget-btn" title="Open in full page">⛶</a>
+            <button class="widget-btn" onclick="logout()" title="Sign out">🚪</button>
+          </div>
+        </div>
         <div class="chat-messages" id="widget-messages">
           <div class="bubble agent">
             <div class="bubble-avatar">🤖</div>
-            <div class="bubble-text">Hi ${user.name || user.email}, how can I help?</div>
+            <div class="bubble-text">Hi ${escapeHtml(user.name || user.email)}, how can I help?</div>
           </div>
         </div>
         <div class="chat-input">
@@ -53,9 +64,8 @@ document.addEventListener('DOMContentLoaded', async () => {
           <button id="widget-send">Send</button>
         </div>
       `;
-      initWidgetChat(user);
+      initWidgetChat();
     } else {
-      // Show login buttons
       panelContent.innerHTML = `
         <p style="margin-bottom:16px;">Sign in to get personalised support.</p>
         <div class="auth-buttons">
@@ -72,7 +82,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  function initWidgetChat(user) {
+  function initWidgetChat() {
     const token = localStorage.getItem('app_jwt');
     const sessionId = 'widget-' + Math.random().toString(36).substr(2, 9);
     const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -91,7 +101,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     function addBubble(text, type) {
       const div = document.createElement('div');
       div.className = `bubble ${type}`;
-      div.innerHTML = `<div class="bubble-avatar">${type === 'user' ? '👤' : '🤖'}</div><div class="bubble-text">${text}</div>`;
+      div.innerHTML = `<div class="bubble-avatar">${type === 'user' ? '👤' : '🤖'}</div><div class="bubble-text">${escapeHtml(text)}</div>`;
       messagesDiv.appendChild(div);
       messagesDiv.scrollTop = messagesDiv.scrollHeight;
     }

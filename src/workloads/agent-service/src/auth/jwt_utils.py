@@ -1,3 +1,4 @@
+# auth/jwt_utils.py — Final
 """
 JWT verification using local public key (no external auth service).
 """

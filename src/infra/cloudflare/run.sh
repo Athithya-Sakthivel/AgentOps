@@ -39,8 +39,8 @@ export TF_VAR_zone_id=$(curl -s -H "X-Auth-Key: $CLOUDFLARE_GLOBAL_API_KEY" -H "
 export TF_VAR_tunnel_name="${TF_VAR_tunnel_name:-${CLOUDFLARE_TUNNEL_NAME:-default-tunnel-1}}"
 export TF_VAR_enable_always_use_https="${TF_VAR_enable_always_use_https:-true}"
 export TF_VAR_enable_tls_1_3="${TF_VAR_enable_tls_1_3:-true}"
-export TF_VAR_enable_bot_fight_mode="${TF_VAR_enable_bot_fight_mode:-false}"
-export TF_VAR_enable_js_detections="${TF_VAR_enable_js_detections:-false}"
+export TF_VAR_enable_bot_fight_mode="${TF_VAR_enable_bot_fight_mode:-true}"
+export TF_VAR_enable_js_detections="${TF_VAR_enable_js_detections:-true}"
 export TF_IN_AUTOMATION=1
 export TF_INPUT=0
 

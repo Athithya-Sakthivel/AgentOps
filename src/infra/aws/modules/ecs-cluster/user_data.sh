@@ -28,9 +28,6 @@ ingress:
   - hostname: ${cloudflare_hostname}
     path: ^/readyz$
     service: http_status:403
-  - hostname: ${cloudflare_hostname}
-    path: /admin/*
-    service: http_status:403
 
   # Auth + WebSocket + API
   - hostname: ${cloudflare_hostname}
@@ -45,6 +42,11 @@ ingress:
       disableChunkedEncoding: false
   - hostname: ${cloudflare_hostname}
     path: /.well-known/*
+    service: http://localhost:8000
+      # Admin dashboard + API
+
+  - hostname: ${cloudflare_hostname}
+    path: /admin/*
     service: http://localhost:8000
 
   # Root (frontend)

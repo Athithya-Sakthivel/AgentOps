@@ -18,6 +18,20 @@ class Base(DeclarativeBase):
     pass
 
 
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    full_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    phone: Mapped[str] = mapped_column(String(20), nullable=False)
+    language_pref: Mapped[str] = mapped_column(String(5), default="en")
+    segment: Mapped[str] = mapped_column(String(50), default="new")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
 class HumanOverride(Base):
     __tablename__ = "human_overrides"
 

@@ -1,6 +1,7 @@
+# auth/dynamodb_rate_limiter.py — Final
 """
 Per-user rate limiter backed by DynamoDB.
-Fails open — if DynamoDB is unreachable or schema mismatches, requests are allowed.
+Fails open — if DynamoDB is unreachable, requests are allowed.
 """
 
 from __future__ import annotations
@@ -21,14 +22,7 @@ def check_rate_limit(
     limit: int | None = None,
     window_seconds: int | None = None,
 ) -> bool:
-    """Return True if the request is allowed, False if rate limited.
-
-    Args:
-        user_id: Unique identifier for the user (e.g. `google#12345`).
-        limit: Max requests per window. Defaults to config value.
-        window_seconds: Duration of the window. Defaults to config value.
-
-    """
+    """Return True if the request is allowed, False if rate limited."""
     if not settings.rate_limit_enabled:
         return True
 

@@ -3,21 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Kestral — Support Chat</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <title>Kestral – Support Chat</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body class="chat-page">
   <nav class="navbar">
     <div class="nav-container">
-      <a href="/" class="nav-brand">
-        <span class="brand-icon">🏪</span>
-        <span>Kestral</span>
-      </a>
+      <a href="/" class="nav-brand">🏪 Kestral</a>
       <div class="nav-links">
-        <a href="/" class="nav-link">← Back to Store</a>
-        <span id="chat-user" class="nav-user"></span>
+        <a href="/" class="nav-link">← Store</a>
         <button onclick="logout()" class="btn btn-ghost">Sign Out</button>
       </div>
     </div>
@@ -26,35 +20,59 @@
   <div class="chat-layout">
     <aside class="chat-sidebar">
       <h3>Quick Help</h3>
-      <button class="quick-btn" data-msg="Where is my order?">📦 Track Order</button>
-      <button class="quick-btn" data-msg="I want to return an item">↩️ Return Item</button>
-      <button class="quick-btn" data-msg="What is your refund policy?">💰 Refund Policy</button>
-      <button class="quick-btn" data-msg="My delivery is late">🚚 Late Delivery</button>
+      <button onclick="sendQuick('Where is my order?')">📦 Track Order</button>
+      <button onclick="sendQuick('I want to return an item')">↩️ Return</button>
+      <button onclick="sendQuick('What is your refund policy?')">💰 Refund</button>
+      <button onclick="sendQuick('My delivery is late')">🚚 Late Delivery</button>
     </aside>
     <main class="chat-main">
       <div id="messages" class="chat-messages">
         <div class="bubble agent">
           <div class="bubble-avatar">🤖</div>
-          <div class="bubble-text">Hi! I'm Kestral's AI assistant. How can I help you today?</div>
+          <div class="bubble-text">Hi! How can I help you today?</div>
         </div>
       </div>
-      <form id="chat-form" class="chat-input-bar">
-        <input id="query-input" type="text" placeholder="Type your message..." autocomplete="off" autofocus>
-        <button type="submit" id="send-btn" disabled>Send</button>
-      </form>
+      <div class="chat-input-bar">
+        <input id="query-input" type="text" placeholder="Type your message..." autofocus>
+        <button id="send-btn" disabled>Send</button>
+      </div>
     </main>
   </div>
 
   <script src="/app.js"></script>
   <script>
-    // Chat page specific WebSocket logic (similar to widget but full‑screen)
     const token = localStorage.getItem('app_jwt');
-    if (!token) window.location.href = '/';
+    if (!token) location.href = '/';
 
-    const sessionId = 'chat-' + Math.random().toString(36).substr(2, 9);
-    const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(`${wsProtocol}//${location.host}/ws/chat/${sessionId}?token=${token}`);
-    // ... (rest of WS handling similar to widget, see app.js)
+    const sessionId = 'full-' + Math.random().toString(36).substr(2, 9);
+    const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${wsProto}//${location.host}/ws/chat/${sessionId}?token=${token}`);
+    const msgs = document.getElementById('messages');
+    const input = document.getElementById('query-input');
+    const sendBtn = document.getElementById('send-btn');
+
+    function addBubble(text, type) {
+      const d = document.createElement('div');
+      d.className = `bubble ${type}`;
+      d.innerHTML = `<div class="bubble-avatar">${type==='user'?'👤':'🤖'}</div><div class="bubble-text">${text}</div>`;
+      msgs.appendChild(d);
+      msgs.scrollTop = msgs.scrollHeight;
+    }
+
+    ws.onopen = () => sendBtn.disabled = false;
+    ws.onmessage = e => addBubble(JSON.parse(e.data).response || 'Error', 'agent');
+    ws.onerror = () => addBubble('Connection error', 'agent');
+
+    sendBtn.addEventListener('click', () => {
+      const q = input.value.trim();
+      if (!q) return;
+      ws.send(JSON.stringify({ query: q }));
+      addBubble(q, 'user');
+      input.value = '';
+    });
+    input.addEventListener('keypress', e => { if (e.key === 'Enter') sendBtn.click(); });
+
+    function sendQuick(msg) { input.value = msg; sendBtn.click(); }
   </script>
 </body>
 </html>

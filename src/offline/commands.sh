@@ -8,6 +8,15 @@ set -euo pipefail
 # Unset them before starting agent-service to catch SSM config bugs early.
 # =============================================================================
 
+curl -s https://athithya.site/auth/logout -c /tmp/cookies.txt -b /tmp/cookies.txt || true
+
+# Kill any process on port 8000 (don't fail if none)
+echo "Cleaning up port 8000..."
+lsof -ti :8000 | xargs kill -9 2>/dev/null || true
+lsof -ti :8001 | xargs kill -9 2>/dev/null || true
+sleep 2
+lsof -ti :8000 && echo "Port 8000 STILL IN USE" && exit 1 || echo "Port 8000 free"
+
 # ── Start MCP Server (no AWS secrets needed) ──────────────────────
 echo "[1/3] Starting mcp-server..."
 cd /workspace/src/workloads/mcp-server
@@ -15,9 +24,6 @@ source .venv/bin/activate
 export PORT=8001
 export DATABASE_URL="postgresql://agentops:localdev@localhost:5432/kestral"
 python3 src/main.py > /tmp/mcp-server.log 2>&1 &
-MCP_PID=$!
-sleep 3
-curl -s http://localhost:8001/readyz && echo "  mcp-server ready" || echo "  mcp-server FAILED"
 
 # ── Unset ALL SSM-managed secrets ─────────────────────────────────
 echo "[2/3] Unsetting SSM-managed env vars..."
@@ -41,13 +47,4 @@ source .venv/bin/activate
 export PORT=8000
 export MCP_SERVER_URL="http://localhost:8001/mcp"
 export DATABASE_URL="postgresql://agentops:localdev@localhost:5432/kestral"
-# Only env vars that are NOT in SSM remain: PORT, MCP_SERVER_URL, DATABASE_URL, LOG_LEVEL
-python3 src/main.py > /tmp/agent-service.log 2>&1 &
-AGENT_PID=$!
-sleep 10
-curl -s http://localhost:8000/healthz && echo "  agent-service ready" || echo "  agent-service FAILED"
-
-echo ""
-echo "Both services running:"
-echo "  mcp-server    PID $MCP_PID  → http://localhost:8001"
-echo "  agent-service PID $AGENT_PID → http://localhost:8000"
+python3 src/main.py

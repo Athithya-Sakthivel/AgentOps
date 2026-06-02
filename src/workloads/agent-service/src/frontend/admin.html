@@ -3,67 +3,181 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Kestral — Admin</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <title>Kestral Admin</title>
   <link rel="stylesheet" href="/styles.css">
+  <style>
+    .admin-page { font-family: 'Inter', sans-serif; background: #f1f5f9; }
+    .admin-nav { background: #1e293b; color: #fff; padding: 0 24px; height: 56px; display: flex; align-items: center; gap: 24px; }
+    .admin-nav a { color: #94a3b8; text-decoration: none; font-size: 14px; }
+    .admin-nav a:hover { color: #fff; }
+    .admin-nav .brand { font-weight: 700; font-size: 18px; color: #fff; }
+    .tabs { display: flex; gap: 0; border-bottom: 2px solid #e2e8f0; background: #fff; padding: 0 24px; }
+    .tab { padding: 12px 24px; cursor: pointer; color: #64748b; font-weight: 500; border-bottom: 2px solid transparent; margin-bottom: -2px; }
+    .tab.active { color: #0d6efd; border-bottom-color: #0d6efd; }
+    .content { padding: 24px; max-width: 1200px; }
+    .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+    .stat-card { background: #fff; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+    .stat-value { font-size: 28px; font-weight: 700; }
+    .stat-label { font-size: 13px; color: #64748b; margin-top: 4px; }
+    .stat-hint { font-size: 11px; color: #94a3b8; }
+    table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+    th { text-align: left; padding: 12px 16px; background: #f8fafc; color: #475569; font-weight: 600; font-size: 13px; }
+    td { padding: 10px 16px; border-top: 1px solid #e2e8f0; font-size: 14px; }
+    .badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+    .badge-critical { background: #fee2e2; color: #b91c1c; }
+    .badge-high { background: #fff3e0; color: #c2410c; }
+    .badge-medium { background: #f1f5f9; color: #334155; }
+    .btn { padding: 8px 16px; border-radius: 6px; font-weight: 500; cursor: pointer; border: none; }
+    .btn-primary { background: #0d6efd; color: #fff; }
+    .btn-outline { background: transparent; border: 1px solid #cbd5e1; color: #334155; }
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; font-size: 13px; font-weight: 500; color: #334155; margin-bottom: 4px; }
+    .form-group input, .form-group textarea { width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px; }
+    .ticket-row { cursor: pointer; }
+    .ticket-row:hover { background: #f8fafc; }
+    /* Modal */
+    .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+    .modal-content { background: #fff; border-radius: 12px; padding: 24px; max-width: 640px; width: 90%; max-height: 80vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.15); }
+    .modal-close { float: right; background: none; border: none; font-size: 20px; cursor: pointer; color: #64748b; }
+    .modal-field { margin-bottom: 12px; }
+    .modal-field label { font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
+    .modal-field div { font-size: 14px; color: #1e293b; margin-top: 2px; }
+  </style>
 </head>
 <body class="admin-page">
-  <nav class="navbar admin-nav">
-    <div class="nav-container">
-      <a href="/" class="nav-brand">
-        <span class="brand-icon">🏪</span>
-        <span>Kestral Admin</span>
-      </a>
-      <div class="nav-links">
-        <a href="/" class="nav-link">Store</a>
-        <button onclick="logout()" class="btn btn-ghost">Sign Out</button>
-      </div>
-    </div>
+  <nav class="admin-nav">
+    <span class="brand">🏪 Kestral Admin</span>
+    <a href="/">Store</a>
+    <a href="#" onclick="logout()">Sign Out</a>
   </nav>
 
-  <div class="admin-layout">
-    <aside class="admin-sidebar">
-      <a href="#overview" class="sidebar-link active">📊 Overview</a>
-      <a href="#queue" class="sidebar-link">🎫 Ticket Queue</a>
-      <a href="#overrides" class="sidebar-link">✏️ Overrides</a>
-    </aside>
-    <main class="admin-content">
-      <section id="overview">
-        <h2>Overview</h2>
-        <div class="stats-grid">
-          <div class="stat-card blue"><div class="stat-value" id="stat-total">-</div><div class="stat-label">Total Tickets</div></div>
-          <div class="stat-card green"><div class="stat-value" id="stat-auto">-</div><div class="stat-label">Auto‑Resolved</div></div>
-          <div class="stat-card purple"><div class="stat-value" id="stat-rate">-</div><div class="stat-label">Resolution Rate</div></div>
-          <div class="stat-card orange"><div class="stat-value" id="stat-overrides">-</div><div class="stat-label">Overrides</div></div>
-        </div>
-      </section>
-      <section id="queue">
-        <h2>Open Tickets</h2>
-        <div id="ticket-list"></div>
-      </section>
-      <section id="overrides">
-        <h2>Submit Override</h2>
-        <form id="override-form">
-          <label>Ticket ID</label>
-          <input id="override-ticket-id" required>
-          <label>Original Intent</label>
-          <input id="override-original" required>
-          <label>Corrected Intent</label>
-          <input id="override-corrected" required>
-          <label>Reason</label>
-          <textarea id="override-reason" rows="2"></textarea>
-          <button type="submit" class="btn btn-primary">Submit</button>
-          <div id="override-status"></div>
-        </form>
-      </section>
-    </main>
+  <div class="tabs">
+    <div class="tab active" data-tab="overview">📊 Overview</div>
+    <div class="tab" data-tab="queue">🎫 Tickets</div>
+    <div class="tab" data-tab="overrides">✏️ Overrides</div>
+  </div>
+
+  <div class="content" id="tab-content"></div>
+
+  <!-- Ticket detail modal -->
+  <div id="ticket-modal" class="modal-overlay hidden">
+    <div class="modal-content">
+      <button class="modal-close" onclick="closeModal()">✕</button>
+      <h2 style="margin-bottom:16px">Ticket Details</h2>
+      <div id="modal-body"></div>
+    </div>
   </div>
 
   <script src="/app.js"></script>
   <script>
-    // Admin JS (fetch analytics, queue, override submission)
-    // Uses app_jwt token and /admin/... endpoints
+    const token = localStorage.getItem('app_jwt');
+    if (!token) location.href = '/auth/login';
+    const headers = { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' };
+
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        loadTab(tab.dataset.tab);
+      });
+    });
+
+    async function loadTab(name) {
+      const area = document.getElementById('tab-content');
+      if (name === 'overview') area.innerHTML = await renderOverview();
+      else if (name === 'queue') area.innerHTML = await renderQueue();
+      else if (name === 'overrides') area.innerHTML = renderOverrides();
+    }
+
+    async function renderOverview() {
+      const resp = await fetch('/admin/analytics', { headers });
+      if (!resp.ok) return '<p class="error">Access denied. Admin only.</p>';
+      const d = await resp.json();
+      return `
+        <div class="stats-grid">
+          <div class="stat-card"><div class="stat-value">${d.total_tickets || 0}</div><div class="stat-label">Total Tickets</div><div class="stat-hint">All time</div></div>
+          <div class="stat-card"><div class="stat-value" style="color:#198754">${d.auto_resolved || 0}</div><div class="stat-label">Auto‑Resolved</div><div class="stat-hint">${d.auto_resolution_rate || 0}% resolution rate</div></div>
+          <div class="stat-card"><div class="stat-value" style="color:#6f42c1">${d.auto_resolution_rate || 0}%</div><div class="stat-label">Resolution Rate</div><div class="stat-hint">Auto / Total</div></div>
+          <div class="stat-card"><div class="stat-value" style="color:#fd7e14">${d.human_overrides || 0}</div><div class="stat-label">Human Overrides</div><div class="stat-hint">Manual corrections</div></div>
+        </div>`;
+    }
+
+    async function renderQueue() {
+      const resp = await fetch('/admin/queue', { headers });
+      if (!resp.ok) return '<p class="error">Access denied.</p>';
+      const data = await resp.json();
+      if (!data.tickets.length) return '<p>No open tickets.</p>';
+      let html = `<table>
+        <thead><tr><th>Ticket ID</th><th>Customer</th><th>Query</th><th>Intent</th><th>Priority</th><th>Status</th><th>Created</th></tr></thead><tbody>`;
+      data.tickets.forEach(t => {
+        html += `<tr class="ticket-row" onclick="openTicket('${t.id}')">
+          <td><code>${t.id.substring(0,8)}</code></td>
+          <td>${t.user_id?.substring(0,8) || '-'}</td>
+          <td title="${t.query_text}">${t.query_text.substring(0, 60)}${t.query_text.length > 60 ? '…' : ''}</td>
+          <td>${t.classification?.intent || 'N/A'}</td>
+          <td><span class="badge badge-${t.priority || 'medium'}">${t.priority || 'medium'}</span></td>
+          <td>${t.status}</td>
+          <td>${new Date(t.created_at).toLocaleDateString()}</td>
+        </tr>`;
+      });
+      html += `</tbody></table>`;
+      return html;
+    }
+
+    function renderOverrides() {
+      return `
+        <h2>Submit Override</h2>
+        <div class="form-group"><label>Ticket ID</label><input id="override-ticket-id" placeholder="e.g., e5f6a7b8..."></div>
+        <div class="form-group"><label>Original Intent</label><input id="override-original"></div>
+        <div class="form-group"><label>Corrected Intent</label><input id="override-corrected"></div>
+        <div class="form-group"><label>Reason</label><textarea id="override-reason" rows="3"></textarea></div>
+        <button class="btn btn-primary" onclick="submitOverride()">Submit</button>
+        <div id="override-status" style="margin-top:8px"></div>`;
+    }
+
+    window.submitOverride = async () => {
+      const body = {
+        ticket_id: document.getElementById('override-ticket-id').value,
+        original_classification: { intent: document.getElementById('override-original').value },
+        corrected_classification: { intent: document.getElementById('override-corrected').value },
+        reason: document.getElementById('override-reason').value,
+        overridden_by: 'admin'
+      };
+      const resp = await fetch('/admin/override', { method: 'POST', headers, body: JSON.stringify(body) });
+      const status = document.getElementById('override-status');
+      if (resp.ok) { status.textContent = '✅ Override submitted'; status.style.color = '#198754'; }
+      else { status.textContent = '❌ Failed'; status.style.color = '#dc3545'; }
+    };
+
+    async function openTicket(id) {
+      const resp = await fetch(`/admin/ticket/${id}`, { headers });
+      if (!resp.ok) return;
+      const t = await resp.json();
+      const body = document.getElementById('modal-body');
+      body.innerHTML = `
+        <div class="modal-field"><label>Ticket ID</label><div><code>${t.id}</code></div></div>
+        <div class="modal-field"><label>Query</label><div>${t.query_text}</div></div>
+        <div class="modal-field"><label>Intent</label><div>${t.classification?.intent || 'N/A'}</div></div>
+        <div class="modal-field"><label>Priority</label><div><span class="badge badge-${t.priority || 'medium'}">${t.priority || 'medium'}</span></div></div>
+        <div class="modal-field"><label>Status</label><div>${t.status}</div></div>
+        <div class="modal-field"><label>Assigned Team</label><div>${t.assigned_team || '-'}</div></div>
+        <div class="modal-field"><label>Resolution Type</label><div>${t.resolution_type || '-'}</div></div>
+        <div class="modal-field"><label>Created</label><div>${new Date(t.created_at).toLocaleString()}</div></div>
+        <div class="modal-field"><label>Updated</label><div>${t.updated_at ? new Date(t.updated_at).toLocaleString() : '-'}</div></div>
+        <hr style="margin:16px 0">
+        <h3 style="margin-bottom:8px">Customer</h3>
+        <div class="modal-field"><label>Name</label><div>${t.customer?.full_name || 'Unknown'}</div></div>
+        <div class="modal-field"><label>Email</label><div>${t.customer?.email || '-'}</div></div>
+        <div class="modal-field"><label>Phone</label><div>${t.customer?.phone || '-'}</div></div>
+      `;
+      document.getElementById('ticket-modal').classList.remove('hidden');
+    }
+
+    window.closeModal = () => {
+      document.getElementById('ticket-modal').classList.add('hidden');
+    };
+
+    loadTab('overview');
   </script>
 </body>
 </html>

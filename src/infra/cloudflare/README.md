@@ -40,8 +40,8 @@ The tunnel name is `agentops-tunnel`. Cloudflare Tunnel resolves to a tunnel tar
 
 ### Bot Protections
 
-- `enable_bot_fight_mode = false`
-  Bot Fight Mode may block legitimate API traffic. Disabled by default.
+- `enable_bot_fight_mode = true`
+  Bot Fight Mode blocks unneccessary API traffic. Enabled by default.
 - `enable_js_detections = true`
   JavaScript detections help filter automated traffic without blocking legitimate users.
 
@@ -78,7 +78,7 @@ Use one of:
 - `TF_VAR_tunnel_name` (default: `agentops-tunnel`)
 - `TF_VAR_enable_always_use_https` (default: `true`)
 - `TF_VAR_enable_tls_1_3` (default: `true`)
-- `TF_VAR_enable_bot_fight_mode` (default: `false`)
+- `TF_VAR_enable_bot_fight_mode` (default: `true`)
 - `TF_VAR_enable_js_detections` (default: `true`)
 
 ## Execution

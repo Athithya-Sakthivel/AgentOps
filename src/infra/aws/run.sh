@@ -59,7 +59,7 @@ if [ -z "${TF_VAR_cloudflare_tunnel_token:-}" ]; then
 fi
 
 # ---- RDS (disabled in staging to save cost) ----
-export TF_VAR_create_rds="${TF_VAR_create_rds:-true}"
+export TF_VAR_create_rds="${TF_VAR_create_rds:-false}"
 export TF_VAR_db_password="${TF_VAR_db_password:-SecurePass123!}"  # or leave empty – Terraform generates random password
 
 # ---- Budget & Alerts ----
@@ -318,7 +318,6 @@ destroy_auto() {
   exec_and_log "tofu-destroy" bash -c "cd \"$STACK_DIR\" && tofu destroy -input=false -auto-approve"
 }
 
-
 force_cleanup() {
   # Use environment variable or default to "staging"
   local env="${TF_VAR_environment:-staging}"
@@ -330,25 +329,73 @@ force_cleanup() {
   local lt_name="${cluster_name}-lt"
 
   # ----------------------------------------------------------------------
-  # 1. ECS Services – force delete to bypass stuck DRAINING state
+  # Helper: wait for no tasks in cluster
   # ----------------------------------------------------------------------
-  log "Scaling down ECS services..."
+  wait_for_no_tasks() {
+    local cluster="$1"
+    local max_wait=180  # 3 minutes
+    local waited=0
+    while [ $waited -lt $max_wait ]; do
+      local tasks
+      tasks=$(aws ecs list-tasks --cluster "$cluster" --query "taskArns" --output text 2>/dev/null)
+      if [ -z "$tasks" ]; then
+        log "No tasks remaining in cluster $cluster."
+        return 0
+      fi
+      log "Tasks still present: $tasks. Waiting 10s..."
+      sleep 10
+      waited=$((waited + 10))
+    done
+    log "WARNING: Tasks still present after $max_wait seconds. Forcing stop."
+    for task in $tasks; do
+      aws ecs stop-task --cluster "$cluster" --task "$task" 2>/dev/null || true
+    done
+    sleep 10
+  }
+
+  # ----------------------------------------------------------------------
+  # Helper: wait for service deletion
+  # ----------------------------------------------------------------------
+  wait_for_service_deleted() {
+    local cluster="$1"
+    local service="$2"
+    local max_wait=60
+    local waited=0
+    while [ $waited -lt $max_wait ]; do
+      if ! aws ecs describe-services --cluster "$cluster" --services "$service" --query "services[0].status" --output text 2>/dev/null | grep -q "^ACTIVE$"; then
+        log "Service $service deleted."
+        return 0
+      fi
+      log "Service $service still exists. Waiting 5s..."
+      sleep 5
+      waited=$((waited + 5))
+    done
+    log "WARNING: Service $service still exists after $max_wait seconds. Continuing anyway."
+  }
+
+  # ----------------------------------------------------------------------
+  # 1. Scale down services to 0 and wait for tasks to stop
+  # ----------------------------------------------------------------------
+  log "Scaling down ECS services to 0..."
   aws ecs update-service --cluster "$cluster_name" --service "${cluster_name}-agent" \
     --desired-count 0 --force-new-deployment 2>/dev/null || true
   aws ecs update-service --cluster "$cluster_name" --service "${cluster_name}-mcp" \
     --desired-count 0 --force-new-deployment 2>/dev/null || true
-  sleep 20
-
-  log "Deleting ECS services (force)..."
-  aws ecs delete-service --cluster "$cluster_name" --service "${cluster_name}-agent" \
-    --force 2>/dev/null || true
-  aws ecs delete-service --cluster "$cluster_name" --service "${cluster_name}-mcp" \
-    --force 2>/dev/null || true
-  sleep 20
+  sleep 10
+  wait_for_no_tasks "$cluster_name"
 
   # ----------------------------------------------------------------------
-  # 2. Disassociate capacity provider from cluster
-  #    This is the missing step that caused DELETE_FAILED for the cp.
+  # 2. Delete ECS services
+  # ----------------------------------------------------------------------
+  log "Deleting ECS services..."
+  aws ecs delete-service --cluster "$cluster_name" --service "${cluster_name}-agent" --force 2>/dev/null || true
+  aws ecs delete-service --cluster "$cluster_name" --service "${cluster_name}-mcp" --force 2>/dev/null || true
+  sleep 10
+  wait_for_service_deleted "$cluster_name" "${cluster_name}-agent"
+  wait_for_service_deleted "$cluster_name" "${cluster_name}-mcp"
+
+  # ----------------------------------------------------------------------
+  # 3. Disassociate capacity provider from cluster
   # ----------------------------------------------------------------------
   log "Removing capacity provider from cluster strategy..."
   aws ecs put-cluster-capacity-providers --cluster "$cluster_name" \
@@ -356,34 +403,43 @@ force_cleanup() {
   sleep 10
 
   # ----------------------------------------------------------------------
-  # 3. Now delete the capacity provider (now disassociated)
+  # 4. Delete the capacity provider
   # ----------------------------------------------------------------------
   log "Deleting capacity provider..."
   aws ecs delete-capacity-provider --capacity-provider "${cluster_name}-cp" 2>/dev/null || true
   sleep 5
 
   # ----------------------------------------------------------------------
-  # 4. Delete the cluster (now no longer referencing the cp)
+  # 5. Delete the cluster (now no services and no capacity provider)
   # ----------------------------------------------------------------------
   log "Deleting ECS cluster..."
   aws ecs delete-cluster --cluster "$cluster_name" 2>/dev/null || true
   sleep 5
 
   # ----------------------------------------------------------------------
-  # 5. Auto Scaling Group – force delete even with instances
+  # 6. Auto Scaling Group – force delete (terminates instances)
   # ----------------------------------------------------------------------
   log "Deleting Auto Scaling Group (force)..."
   aws autoscaling delete-auto-scaling-group --auto-scaling-group-name "$asg_name" \
     --force-delete 2>/dev/null || true
+  # Wait for ASG deletion to complete
+  for i in {1..12}; do
+    if ! aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names "$asg_name" --query "AutoScalingGroups[0].AutoScalingGroupName" --output text 2>/dev/null | grep -q "$asg_name"; then
+      log "ASG deleted."
+      break
+    fi
+    log "ASG still exists, waiting 5s..."
+    sleep 5
+  done
 
   # ----------------------------------------------------------------------
-  # 6. Launch Template
+  # 7. Launch Template
   # ----------------------------------------------------------------------
   log "Deleting launch template..."
   aws ec2 delete-launch-template --launch-template-name "$lt_name" 2>/dev/null || true
 
   # ----------------------------------------------------------------------
-  # 7. Internet Gateway – detach then delete
+  # 8. Internet Gateway – detach then delete
   # ----------------------------------------------------------------------
   local vpc_id
   vpc_id=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=${name_prefix}-vpc" \

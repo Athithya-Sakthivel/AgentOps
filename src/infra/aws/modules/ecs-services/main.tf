@@ -18,7 +18,7 @@ resource "aws_ecs_task_definition" "agent" {
       portMappings = [
         {
           containerPort = 8000
-          hostPort      = 0
+          hostPort      = 8000
           protocol      = "tcp"
         }
       ]
@@ -70,7 +70,7 @@ resource "aws_ecs_task_definition" "mcp" {
       portMappings = [
         {
           containerPort = 8001
-          hostPort      = 0
+          hostPort      = 8001
           protocol      = "tcp"
         }
       ]

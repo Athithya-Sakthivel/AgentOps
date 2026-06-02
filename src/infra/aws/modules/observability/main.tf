@@ -133,19 +133,3 @@ resource "aws_cloudwatch_metric_alarm" "errors_high" {
   alarm_actions       = [var.alarm_sns_topic_arn]
   treat_missing_data  = "notBreaching"
 }
-
-resource "aws_cloudwatch_metric_alarm" "no_requests" {
-  count = var.alarm_sns_topic_arn != "" ? 1 : 0
-
-  alarm_name          = "${var.name_prefix}-no-requests"
-  comparison_operator = "LessThanOrEqualToThreshold"
-  evaluation_periods  = 6
-  metric_name         = "AgentRequests"
-  namespace           = "AgentOps"
-  period              = 300
-  statistic           = "Sum"
-  threshold           = 0
-  alarm_description   = "No agent requests for 30 minutes"
-  alarm_actions       = [var.alarm_sns_topic_arn]
-  treat_missing_data  = "breaching"
-}

@@ -133,10 +133,13 @@ module "iam_github" {
     }
   }
 }
+
 # ----------------------------------------------------------------------
-# ECS CLUSTER (Managed Instances)
+# ECS CLUSTER (Managed Instances) – only if enabled
 # ----------------------------------------------------------------------
 module "ecs_cluster" {
+  count = var.enable_ecs ? 1 : 0
+
   source = "./modules/ecs-cluster"
 
   cluster_name              = "${var.name_prefix}-cluster"
@@ -153,17 +156,19 @@ module "ecs_cluster" {
 }
 
 # ----------------------------------------------------------------------
-# ECS TASKS & SERVICES
+# ECS TASKS & SERVICES – only if enabled
 # ----------------------------------------------------------------------
 module "ecs_services" {
+  count = var.enable_ecs ? 1 : 0
+
   source = "./modules/ecs-services"
 
   cluster_name                 = "${var.name_prefix}-cluster"
   environment                  = var.environment
   aws_region                   = var.region
-  cluster_id                   = module.ecs_cluster.cluster_id
-  capacity_provider_name       = module.ecs_cluster.capacity_provider_name
-  capacity_provider_dependency = module.ecs_cluster.capacity_provider_attachment
+  cluster_id                   = module.ecs_cluster[0].cluster_id
+  capacity_provider_name       = module.ecs_cluster[0].capacity_provider_name
+  capacity_provider_dependency = module.ecs_cluster[0].capacity_provider_attachment
 
   ecs_execution_role_arn = module.iam_ecs.ecs_task_execution_role_arn
   agent_task_role_arn    = module.iam_ecs.agent_task_role_arn
@@ -188,7 +193,6 @@ module "ecs_services" {
   tags = var.tags
 }
 
-
 # ----------------------------------------------------------------------
 # OBSERVABILITY (CloudWatch logs, dashboard, alarms)
 # ----------------------------------------------------------------------
@@ -198,7 +202,7 @@ module "observability" {
   name_prefix         = var.name_prefix
   environment         = var.environment
   aws_region          = var.region
-  retention_in_days   = var.environment == "prod" ? 30 : 7
+  retention_in_days   = var.environment == "prod" ? 14 : 7
   alarm_sns_topic_arn = var.alarm_sns_topic_arn
   tags                = var.tags
 }

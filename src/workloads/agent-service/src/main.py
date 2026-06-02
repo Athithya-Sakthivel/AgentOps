@@ -1,3 +1,6 @@
+# =============================================================================
+# main.py — Final
+# =============================================================================
 """
 Agent Service - entrypoint.
 
@@ -13,7 +16,6 @@ import sys
 from contextlib import asynccontextmanager
 
 import dspy
-from auth.admin_middleware import AdminAuthMiddleware
 from auth.auth_middleware import IdentityMiddleware
 from compile_dspy import load_or_compile_triage
 from config import create_resolver_lm, create_safeguard_lm, load_ssm_parameters, settings
@@ -25,7 +27,7 @@ from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from logging_utils import log_event
 from mcp_client import MCPClientManager
 from policy_search import warmup_cache_async as warmup_policy_cache
-from routes import router
+from routes import _redirect_uri_base, router
 from starlette.middleware.sessions import SessionMiddleware
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -44,7 +46,6 @@ for noisy in ("uvicorn.access", "uvicorn", "httpx", "httpcore", "openinference")
 async def lifespan(app: FastAPI):
     log_event("INFO", "Starting Agent Service...")
 
-    # Load secrets from SSM if not set via env
     load_ssm_parameters()
 
     resolver_lm = create_resolver_lm()
@@ -87,16 +88,15 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Session middleware required for OIDC flow (stores state, nonce)
+_cookie_secure = _redirect_uri_base().startswith("https://")
 app.add_middleware(
     SessionMiddleware,
     secret_key=settings.session_secret,
     session_cookie="agentops_session",
     same_site="lax",
-    https_only=settings.deployment_environment != "local",
+    https_only=_cookie_secure,
 )
 
-# CORS (adjust origins for production)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:3001").split(
@@ -106,9 +106,10 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization"],
 )
 
-# Auth middlewares
-app.add_middleware(IdentityMiddleware)  # attaches user claims from JWT
-app.add_middleware(AdminAuthMiddleware)  # protects /admin/* by domain/tenant
+app.add_middleware(IdentityMiddleware)
+
+# Admin protection is handled via FastAPI dependencies on the routes themselves,
+# not by a blanket middleware (which conflicts with serving the static admin.html).
 
 app.include_router(router)
 
@@ -125,7 +126,6 @@ async def readyz():
     return {"status": "not_ready"}, 503
 
 
-# Serve frontend static files (mounted at root)
 frontend_dir = os.path.join(os.path.dirname(__file__), "frontend")
 if os.path.isdir(frontend_dir):
     app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")

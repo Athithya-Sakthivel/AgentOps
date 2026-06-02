@@ -61,13 +61,16 @@ async def get_recent_orders(
     async with pool.acquire() as conn:
         async with conn.transaction():
             rows = await conn.fetch(
-                "SELECT id, user_id, product_id, status, quantity, amount, "
-                "discount_amount, shipping_amount, cod_fee, payment_method, "
-                "shipping_address, pincode, city, order_date, delivery_date, "
-                "promised_delivery_date, is_delayed, delivery_attempts, "
-                "tracking_number, notes "
-                "FROM orders WHERE user_id = $1 "
-                "ORDER BY order_date DESC LIMIT $2",
+                """SELECT o.id, o.user_id, o.product_id, o.status, o.quantity,
+                   o.amount, o.discount_amount, o.shipping_amount, o.cod_fee,
+                   o.payment_method, o.shipping_address, o.pincode, o.city,
+                   o.order_date, o.delivery_date, o.promised_delivery_date,
+                   o.is_delayed, o.delivery_attempts, o.tracking_number, o.notes,
+                   p.name AS product_name, p.category, p.return_window_days
+                   FROM orders o
+                   JOIN products p ON o.product_id = p.id
+                   WHERE o.user_id = $1
+                   ORDER BY o.order_date DESC LIMIT $2""",
                 user_id,
                 limit,
             )

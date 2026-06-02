@@ -1,27 +1,14 @@
-"""
-LangGraph node implementations - production ready.
-
-All nodes receive Runtime[Context] and use structured logging with run_id.
-
-Includes:
-  - guardrail_classifier   (DSPy triage)
-  - context_gatherer       (customer + order lookup)
-  - action_dispatcher      (deterministic tool-first dispatch)
-  - agentic_resolver       (LLM-driven tool use)
-  - response_formatter     (polished user-facing message)
-  - human_escalate         (ticket creation + routing)
-"""
-
+# =============================================================================
+# nodes.py - Pragmatic agent: classify, gather context, route tickets
+# =============================================================================
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
 import re
-from datetime import datetime, timedelta
 from typing import Any
 
-from config import settings
 from langgraph.runtime import Runtime
 from logging_utils import log_event
 from policy_search import search_policies
@@ -31,21 +18,14 @@ log = logging.getLogger("agent-service")
 
 
 # ---------------------------------------------------------------------------
-# helpers
+# Helpers
 # ---------------------------------------------------------------------------
-
-
 def _prediction_to_dict(pred: Any) -> dict[str, Any]:
     if pred is None:
         return {}
     if isinstance(pred, dict):
         return pred
-    result = {}
-    for key, value in pred.items():
-        if key.startswith("_"):
-            continue
-        result[key] = value
-    return result
+    return {k: v for k, v in pred.items() if not k.startswith("_")}
 
 
 def _safe_json_dumps(obj: Any) -> str:
@@ -59,149 +39,52 @@ def _safe_json_dumps(obj: Any) -> str:
         return json.dumps(str(obj))
 
 
-def _summarise_for_llm(result: Any, max_chars: int = 1000) -> Any:
-    if isinstance(result, dict):
-        if "results" in result and isinstance(result["results"], list):
-            truncated = []
-            for r in result["results"][:2]:
-                r_copy = dict(r)
-                if "chunk_text" in r_copy:
-                    r_copy["chunk_text"] = r_copy["chunk_text"][:300]
-                truncated.append(r_copy)
-            return {"results": truncated, "total": len(result["results"])}
-        return {k: _summarise_for_llm(v, max_chars) for k, v in result.items()}
-    if isinstance(result, str) and len(result) > max_chars:
-        return result[:max_chars]
-    return result
-
-
-def _unwrap_nested_json(text: str) -> str:
-    if not isinstance(text, str):
-        return str(text)
-    stripped = text.strip()
-    start = stripped.find("{")
-    end = stripped.rfind("}")
-    if start >= 0 and end > start and '"action"' in stripped:
-        try:
-            inner = json.loads(stripped[start : end + 1])
-            if isinstance(inner, dict) and "response" in inner:
-                return inner["response"]
-        except (json.JSONDecodeError, KeyError):
-            pass
-    return text
-
-
-def _resolve_order_id(orders: list[dict], query: str) -> str | None:
-    if not orders:
+def _safe_extract_data(raw_result: Any) -> Any:
+    if raw_result is None:
         return None
-    query_lower = query.lower()
-    for o in orders:
-        if not isinstance(o, dict):
-            continue
-        tracking = (o.get("tracking_number") or "").lower()
-        if tracking and tracking in query_lower:
-            return o["id"]
-    for o in orders:
-        if not isinstance(o, dict):
-            continue
-        product_name = (o.get("product_name") or "").lower()
-        if product_name and any(word in query_lower for word in product_name.split()):
-            return o["id"]
-    for o in orders:
-        if isinstance(o, dict):
-            return o["id"]
-    return None
-
-
-def _extract_order_id_from_query(query: str) -> str | None:
-    m = re.search(
-        r"\b(?:ORD-\d+|[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})\b",
-        query,
-        re.IGNORECASE,
-    )
-    return m.group(0) if m else None
+    if hasattr(raw_result, "data") and raw_result.data is not None:
+        return raw_result.data
+    if isinstance(raw_result, dict) and "result" in raw_result and len(raw_result) == 1:
+        return raw_result["result"]
+    return raw_result
 
 
 # ---------------------------------------------------------------------------
-# deterministic action mapping (action_dispatcher)
+# Team routing (deterministic, based on DSPy intent)
 # ---------------------------------------------------------------------------
-
-
-def _next_business_day() -> str:
-    today = datetime.now()
-    if today.weekday() == 5:
-        today = today + timedelta(days=2)
-    elif today.weekday() == 6:
-        today = today + timedelta(days=1)
-    else:
-        today = today + timedelta(days=1)
-    return today.strftime("%Y-%m-%d")
-
-
-INTENT_TO_ACTION = {
-    "late_delivery": {
-        "tool": "issue_wallet_credit",
-        "args_template": {"amount": 100, "reason": "delivery delay compensation"},
-        "max_amount": 500,
-    },
-    "delayed_delivery": {
-        "tool": "issue_wallet_credit",
-        "args_template": {"amount": 100, "reason": "delivery delay compensation"},
-        "max_amount": 500,
-    },
-    "damaged_product": {
-        "tool": "schedule_return_pickup",
-        "args_template": {"pickup_date": _next_business_day},
-    },
-    "defective_product": {
-        "tool": "schedule_return_pickup",
-        "args_template": {"pickup_date": _next_business_day},
-    },
-    "return_request": {
-        "tool": "check_refund_eligibility",
-        "pre_check": True,
-    },
-    "refund_status": {
-        "tool": "check_refund_eligibility",
-        "pre_check": True,
-    },
-    "refund_query": {
-        "tool": "check_refund_eligibility",
-        "pre_check": True,
-    },
-    "refund_request": {
-        "tool": "check_refund_eligibility",
-        "pre_check": True,
-    },
-    "cancellation_request": {
-        "tool": "check_refund_eligibility",
-        "pre_check": True,
-    },
-    "wrong_item_delivered": {
-        "tool": "check_refund_eligibility",
-        "pre_check": True,
-    },
+INTENT_TO_TEAM: dict[str, str] = {
+    "return_request": "order_fulfillment",
+    "refund_status": "payments",
+    "cancellation_request": "order_fulfillment",
+    "wrong_item_delivered": "order_fulfillment",
+    "damaged_product": "service_center",
+    "defective_product": "service_center",
+    "late_delivery": "logistics",
+    "delivery_issue": "logistics",
+    "payment_issue": "payments",
+    "account_issue": "senior_support",
+    "complaint": "senior_support",
+    "general_inquiry": "general_support",
 }
 
 
+def _default_team(intent: str) -> str:
+    return INTENT_TO_TEAM.get(intent, "general_support")
+
+
 # ---------------------------------------------------------------------------
-# 1. GUARDRAIL + CLASSIFIER
+# 1. Guardrail + Classifier (unchanged)
 # ---------------------------------------------------------------------------
-async def guardrail_classifier(
-    state: AgentState,
-    runtime: Runtime[Context],
-) -> dict[str, Any]:
+async def guardrail_classifier(state: AgentState, runtime: Runtime[Context]) -> dict[str, Any]:
     triage_program = runtime.context.triage_program
     run_id = state.get("run_id", "")
-
     log_event("INFO", "Node started", node="guardrail_classifier", run_id=run_id)
 
     query = state["query_text"].strip()
     if not query or len(query) < 3:
-        log_event("WARN", "Query too short, rejecting", run_id=run_id)
         return {
             "guardrail_rejected": True,
-            "final_response": "I couldn't understand your message. Could you please rephrase?",
+            "final_response": "I'm sorry, I didn't catch that. Could you rephrase?",
             "resolution_type": "escalated",
         }
 
@@ -212,7 +95,6 @@ async def guardrail_classifier(
         raise
 
     classification = _prediction_to_dict(result)
-
     log_event(
         "INFO",
         "Triage completed",
@@ -225,9 +107,7 @@ async def guardrail_classifier(
         return {
             "guardrail_rejected": True,
             "classification": classification,
-            "final_response": (
-                "Your message has been flagged for review. A human agent will respond shortly."
-            ),
+            "final_response": "Your message has been flagged for review. A human agent will assist you shortly.",
             "resolution_type": "escalated",
         }
 
@@ -238,20 +118,16 @@ async def guardrail_classifier(
 
 
 # ---------------------------------------------------------------------------
-# 2. CONTEXT GATHERER
+# 2. Context Gatherer (unchanged)
 # ---------------------------------------------------------------------------
-async def context_gatherer(
-    state: AgentState,
-    runtime: Runtime[Context],
-) -> dict[str, Any]:
+async def context_gatherer(state: AgentState, runtime: Runtime[Context]) -> dict[str, Any]:
     mcp_client = runtime.context.mcp_client
     run_id = state.get("run_id", "")
-
     log_event("INFO", "Node started", node="context_gatherer", run_id=run_id)
 
     query = state["query_text"]
     email_match = re.search(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", query)
-    email = email_match.group(0) if email_match else None
+    email = email_match.group(0) if email_match else state.get("user_email")
     user_id = state.get("user_id")
 
     if not email and not user_id:
@@ -260,18 +136,35 @@ async def context_gatherer(
 
     customer = None
     if email:
-        customer = await mcp_client.call_tool("lookup_customer", {"email": email}, run_id=run_id)
-    if customer and customer.get("id"):
+        raw = await mcp_client.call_tool("lookup_customer", {"email": email}, run_id=run_id)
+        raw = _safe_extract_data(raw)
+        if isinstance(raw, dict):
+            customer = raw
+        elif isinstance(raw, list) and raw:
+            customer = raw[0] if isinstance(raw[0], dict) else None
+
+    if customer and isinstance(customer, dict) and customer.get("id"):
         user_id = customer["id"]
+    if user_id and isinstance(user_id, str) and user_id.startswith("google#"):
+        log_event(
+            "WARN",
+            "Customer not found in DB, cannot fetch orders",
+            run_id=run_id,
+        )
+        return {
+            "user_id": user_id,
+            "user_email": email,
+            "customer_context": None,
+        }
 
     orders = []
-    if user_id:
-        orders = await mcp_client.call_tool(
-            "get_recent_orders", {"user_id": user_id}, run_id=run_id
-        )
-
-    if not isinstance(orders, list):
-        orders = [orders] if orders else []
+    if user_id and not (isinstance(user_id, str) and "#" in user_id):
+        raw = await mcp_client.call_tool("get_recent_orders", {"user_id": user_id}, run_id=run_id)
+        raw = _safe_extract_data(raw)
+        if isinstance(raw, list):
+            orders = [o for o in raw if isinstance(o, dict)]
+        elif isinstance(raw, dict):
+            orders = [raw] if raw else []
 
     log_event(
         "INFO",
@@ -280,158 +173,41 @@ async def context_gatherer(
         customer_found=customer is not None,
         orders_count=len(orders),
     )
-
     return {
         "user_id": user_id,
+        "user_email": email,
         "customer_context": {"customer": customer, "orders": orders},
     }
 
 
 # ---------------------------------------------------------------------------
-# 3. ACTION DISPATCHER  (deterministic tool-first)
+# 3. Ticket Router (LLM with tools)
 # ---------------------------------------------------------------------------
-async def action_dispatcher(
-    state: AgentState,
-    runtime: Runtime[Context],
-) -> dict[str, Any]:
-    mcp_client = runtime.context.mcp_client
-    run_id = state.get("run_id", "")
-    classification = state.get("classification", {})
-    customer_ctx = state.get("customer_context") or {}
-    customer = customer_ctx.get("customer") or {}
-    intent = classification.get("intent", "")
+TICKET_ROUTER_SYSTEM_PROMPT = """You are Kestral's support triage specialist. Your job is to either answer the customer's question using our policy documents, or create a well-written ticket that captures the issue and routes it to the correct team.
 
-    log_event("INFO", "Node started", node="action_dispatcher", run_id=run_id, intent=intent)
-
-    if not classification.get("auto_resolvable", False):
-        log_event("INFO", "Not auto resolvable, deferring to LLM", run_id=run_id)
-        return {"action_taken": False}
-
-    mapping = INTENT_TO_ACTION.get(intent)
-    if not mapping:
-        log_event("INFO", "No deterministic action for intent", run_id=run_id, intent=intent)
-        return {"action_taken": False}
-
-    tool_name = mapping["tool"]
-
-    args = {}
-    for k, v in mapping.get("args_template", {}).items():
-        args[k] = v() if callable(v) else v
-
-    if tool_name == "issue_wallet_credit":
-        user_id = state.get("user_id") or customer.get("id")
-        if user_id:
-            args["user_id"] = user_id
-        amount = float(args.get("amount", 0))
-        if amount > float(mapping.get("max_amount", settings.max_wallet_credit_amount)):
-            args["amount"] = float(mapping["max_amount"])
-        if "reason" not in args:
-            args["reason"] = "goodwill gesture"
-        args["amount"] = float(args["amount"])
-
-    orders = customer_ctx.get("orders") or []
-    orders = [o for o in orders if isinstance(o, dict)]
-
-    if mapping.get("pre_check") or tool_name == "schedule_return_pickup":
-        if "order_id" not in args:
-            explicit_id = _extract_order_id_from_query(state.get("query_text", ""))
-            if explicit_id:
-                if any(
-                    o.get("id") == explicit_id or o.get("tracking_number") == explicit_id
-                    for o in orders
-                ):
-                    args["order_id"] = explicit_id
-                else:
-                    return {
-                        "action_taken": True,
-                        "tool_results": [
-                            {
-                                "tool": tool_name,
-                                "args": {},
-                                "result": {
-                                    "error": f"Order {explicit_id} not found in your recent orders."
-                                },
-                            }
-                        ],
-                        "classification": classification,
-                        "user_id": state.get("user_id"),
-                        "customer_context": state.get("customer_context"),
-                    }
-            else:
-                resolved = _resolve_order_id(orders, state.get("query_text", ""))
-                if resolved:
-                    args["order_id"] = resolved
-
-        if "order_id" not in args:
-            log_event(
-                "WARN", "No order_id could be resolved, skipping", run_id=run_id, tool=tool_name
-            )
-            return {"action_taken": False}
-
-    log_event("INFO", "Executing deterministic action", run_id=run_id, tool=tool_name)
-
-    try:
-        tool_output = await mcp_client.call_tool(tool_name, args, run_id=run_id)
-        return {
-            "action_taken": True,
-            "tool_results": [{"tool": tool_name, "args": args, "result": tool_output}],
-            "classification": classification,
-            "user_id": state.get("user_id"),
-            "customer_context": state.get("customer_context"),
-        }
-    except Exception as exc:
-        log_event(
-            "ERROR", "Deterministic action failed", run_id=run_id, tool=tool_name, error=str(exc)
-        )
-        return {"action_taken": False}
-
-
-# ---------------------------------------------------------------------------
-# 4. AGENTIC RESOLVER
-# ---------------------------------------------------------------------------
-RESOLVER_SYSTEM_PROMPT = """You are a helpful, empathetic customer service agent for Kestral, an Indian e-commerce company.
-
-You MUST resolve issues by taking action, not just providing information.
-
-Decision tree (follow in order):
-1. If the customer reports a late delivery -> IMMEDIATELY call issue_wallet_credit
-2. If the customer wants to return an item -> FIRST call check_refund_eligibility, THEN schedule_return_pickup if eligible
-3. If the customer asks about refund status -> call check_refund_eligibility
-4. If the customer reports a damaged / defective product -> call schedule_return_pickup
-5. If the customer needs policy information -> call search_policies
-6. ONLY if none of the above apply -> provide a text response
-
-CRITICAL RULES FOR TOOL CALLS:
-- When a tool requires an `order_id`, you MUST copy the exact `id` field from the
-  "Recent orders" list. NEVER make up an ID.
-- If no order in the list matches, respond: "I couldn't find that order in your
-  recent purchases. Could you double-check the order number?"
-- Do not guess amounts or dates. Use only values returned by the tools.
+You have access to:
+- search_policies(query) - search internal policy documents
+- create_ticket(user_id, query_text, classification, priority, assigned_team, summary) - create a support ticket
 
 Rules:
-- Never respond with text alone when a tool is available.
-- Always confirm tool results to the customer with specific amounts, dates, and IDs.
-- Use the customer's name when available.
-- For high-value claims (>Rs.10,000) or security issues, create a ticket and escalate.
-- Wallet credits cannot exceed Rs.500.
+1. Use the customer's name if you know it.
+2. If the query is a simple policy question, answer it using search_policies.
+3. For any issue that requires action (return, refund, complaint, etc.), create a ticket with a concise summary (2-3 sentences). Include specific order details when relevant.
+4. The assigned_team and priority are provided for you - use them exactly as given. Do not change them.
+5. Never promise a refund, credit, or pickup - just assure the customer that the right team will handle it.
+6. If the query is ambiguous, ask a clarifying question instead of guessing.
 
 Respond in JSON:
-- If you need to call a tool: {"action": "tool_call", "tool": "<name>", "args": {<params>}, "thought": "<why>"}
-- If you have enough information to respond: {"action": "final_answer", "response": "<message to customer>"}
+- To call a tool: {"action": "tool_call", "tool": "<name>", "args": {<params>}}
+- To reply: {"action": "final_answer", "response": "<message>"}
 """
 
-MAX_RESOLVER_STEPS = 3
 
-
-async def agentic_resolver(
-    state: AgentState,
-    runtime: Runtime[Context],
-) -> dict[str, Any]:
+async def ticket_router(state: AgentState, runtime: Runtime[Context]) -> dict[str, Any]:
     resolver_lm = runtime.context.resolver_lm
     mcp_client = runtime.context.mcp_client
     run_id = state.get("run_id", "")
-
-    log_event("INFO", "Node started", node="agentic_resolver", run_id=run_id)
+    log_event("INFO", "Node started", node="ticket_router", run_id=run_id)
 
     query = state["query_text"]
     classification = state.get("classification", {})
@@ -440,95 +216,45 @@ async def agentic_resolver(
     orders = customer_ctx.get("orders") or []
     orders = [o for o in orders if isinstance(o, dict)]
 
+    # Build messages
     messages = [
-        {"role": "system", "content": RESOLVER_SYSTEM_PROMPT},
+        {"role": "system", "content": TICKET_ROUTER_SYSTEM_PROMPT},
         {
             "role": "user",
             "content": (
                 f"Customer: {customer.get('full_name', 'Unknown')} "
                 f"({customer.get('segment', 'unknown')})\n"
+                f"Customer ID: {state.get('user_id', 'unknown')}\n"
                 f"Query: {query}\n"
                 f"Classification: {_safe_json_dumps(classification)}\n"
-                f"Recent orders: {_safe_json_dumps(orders[:3]) if orders else 'None'}"
+                f"Recent orders: {_safe_json_dumps(orders[:3]) if orders else 'None'}\n"
+                f"Assigned team: {_default_team(classification.get('intent', 'general_inquiry'))}\n"
+                f"Priority: {'critical' if classification.get('urgency', 0) >= 9 else 'high' if classification.get('urgency', 0) >= 7 else 'medium'}"
             ),
         },
     ]
 
-    tool_results: list[dict] = []
-
-    for step in range(MAX_RESOLVER_STEPS):
-        log_event("INFO", "Resolver step", run_id=run_id, step=step)
-
+    for step in range(3):
+        log_event("INFO", "Router step", run_id=run_id, step=step)
         try:
             raw = await resolver_lm.acall(messages=messages)
             raw_text = raw[0] if isinstance(raw, list) else raw
             result = json.loads(raw_text) if isinstance(raw_text, str) else raw_text
         except (json.JSONDecodeError, KeyError):
-            log_event(
-                "WARN",
-                "Bad JSON from resolver, forcing final answer",
-                run_id=run_id,
-                step=step,
-            )
-            messages.append(
-                {
-                    "role": "user",
-                    "content": "Please give a final answer now. Do not call more tools.",
-                }
-            )
-            raw = await resolver_lm.acall(messages=messages)
-            raw_text = raw[0] if isinstance(raw, list) else raw
-            final_response = raw_text if isinstance(raw_text, str) else str(raw_text)
-            final_response = _unwrap_nested_json(final_response)
-            log_event("INFO", "Forced final answer", run_id=run_id)
-            return {
-                "final_response": final_response,
-                "resolution_type": "auto_resolved",
-                "tool_results": tool_results,
-            }
+            messages.append({"role": "user", "content": "Please respond with valid JSON."})
+            continue
 
         action = result.get("action")
-        log_event("INFO", "Resolver action", run_id=run_id, step=step, action=action)
-
-        if action not in ("final_answer", "tool_call"):
-            tool_name = action
-            tool_args = result.get("args", {})
-            action = "tool_call"
-        else:
-            tool_name = result.get("tool")
-            tool_args = result.get("args", {})
-
         if action == "final_answer":
-            final_text = result["response"]
-            final_text = _unwrap_nested_json(final_text)
-            log_event("INFO", "Resolution complete", run_id=run_id, steps=step + 1)
+            response = result.get("response", "I've noted your request.")
+            log_event("INFO", "Router completed", run_id=run_id, steps=step + 1)
             return {
-                "final_response": final_text,
+                "final_response": response,
                 "resolution_type": "auto_resolved",
-                "tool_results": tool_results,
             }
 
-        if tool_name in ("check_refund_eligibility", "schedule_return_pickup"):
-            order_id = tool_args.get("order_id")
-            if not order_id:
-                tool_output = {
-                    "error": "No order_id provided. Please specify which order you are referring to."
-                }
-                tool_results.append({"tool": tool_name, "args": tool_args, "result": tool_output})
-                messages.append({"role": "assistant", "content": json.dumps(result)})
-                messages.append(
-                    {"role": "user", "content": f"Tool result: {_safe_json_dumps(tool_output)}"}
-                )
-                continue
-            known_ids = {o.get("id") for o in orders if o.get("id")}
-            if order_id not in known_ids:
-                tool_output = {"error": f"Order ID {order_id} not found in your recent orders."}
-                tool_results.append({"tool": tool_name, "args": tool_args, "result": tool_output})
-                messages.append({"role": "assistant", "content": json.dumps(result)})
-                messages.append(
-                    {"role": "user", "content": f"Tool result: {_safe_json_dumps(tool_output)}"}
-                )
-                continue
+        tool_name = result.get("tool")
+        tool_args = result.get("args", {})
 
         if tool_name == "search_policies":
             try:
@@ -537,206 +263,64 @@ async def agentic_resolver(
                     query=tool_args.get("query", query),
                     top_k=5,
                 )
-                tool_output = {"results": policy_results}
-                log_event(
-                    "INFO",
-                    "Policy search executed",
-                    run_id=run_id,
-                    results_count=len(policy_results),
-                )
+                tool_output = {"results": policy_results[:2]}  # truncate for token limit
             except Exception as exc:
                 tool_output = {"error": str(exc)}
-                log_event("ERROR", "Policy search failed", run_id=run_id, error=str(exc))
-        elif (
-            tool_name == "issue_wallet_credit"
-            and float(tool_args.get("amount", 0)) > settings.max_wallet_credit_amount
-        ):
-            tool_output = {
-                "status": "rejected",
-                "reason": f"Amount exceeds maximum of Rs.{settings.max_wallet_credit_amount}",
-            }
-        else:
+        elif tool_name == "create_ticket":
+            # Merge in the deterministic fields
+            tool_args.setdefault("user_id", state.get("user_id"))
+            tool_args.setdefault("query_text", query)
+            tool_args.setdefault("classification", classification)
+            tool_args.setdefault("priority", "medium")
+            tool_args.setdefault(
+                "assigned_team",
+                _default_team(classification.get("intent", "general_inquiry")),
+            )
+            # Ensure summary is present
+            if "summary" not in tool_args:
+                tool_args["summary"] = query[:200]
             try:
-                clean_args = {}
-                for k, v in tool_args.items():
-                    if k == "amount":
-                        clean_args[k] = float(v)
-                    elif isinstance(v, dict):
-                        clean_args[k] = {
-                            kk: vv for kk, vv in v.items() if not str(kk).startswith("_")
-                        }
-                    else:
-                        clean_args[k] = v
-                tool_output = await mcp_client.call_tool(tool_name, clean_args, run_id=run_id)
+                raw_output = await mcp_client.call_tool(tool_name, tool_args, run_id=run_id)
+                ticket_id = _safe_extract_data(raw_output)
+                tool_output = {
+                    "status": "created",
+                    "ticket_id": str(ticket_id) if ticket_id else "unknown",
+                }
             except Exception as exc:
                 tool_output = {"error": str(exc)}
-                log_event(
-                    "ERROR",
-                    "MCP tool call failed",
-                    run_id=run_id,
-                    tool=tool_name,
-                    error=str(exc),
-                )
+        else:
+            tool_output = {"error": f"Unknown tool: {tool_name}"}
 
-        tool_results.append({"tool": tool_name, "args": tool_args, "result": tool_output})
         messages.append({"role": "assistant", "content": json.dumps(result)})
-        tool_summary = _summarise_for_llm(tool_output)
         messages.append(
-            {"role": "user", "content": f"Tool result: {_safe_json_dumps(tool_summary)}"}
+            {"role": "user", "content": f"Tool result: {_safe_json_dumps(tool_output)}"}
         )
 
+    # Force final answer after max steps
     messages.append({"role": "user", "content": "Please give a final answer to the customer now."})
     raw = await resolver_lm.acall(messages=messages)
     raw_text = raw[0] if isinstance(raw, list) else raw
-    final_response = raw_text if isinstance(raw_text, str) else str(raw_text)
-    final_response = _unwrap_nested_json(final_response)
-    log_event("INFO", "Max steps reached, forced final answer", run_id=run_id)
+    try:
+        final_result = json.loads(raw_text) if isinstance(raw_text, str) else raw_text
+        if isinstance(final_result, dict) and final_result.get("action") == "final_answer":
+            final_response = final_result["response"]
+        else:
+            final_response = raw_text if isinstance(raw_text, str) else str(raw_text)
+    except Exception:
+        final_response = raw_text if isinstance(raw_text, str) else str(raw_text)
+
     return {
         "final_response": final_response,
         "resolution_type": "auto_resolved",
-        "tool_results": tool_results,
     }
 
 
 # ---------------------------------------------------------------------------
-# 5. RESPONSE FORMATTER
+# 4. Human Escalate (for unsafe / urgent cases)
 # ---------------------------------------------------------------------------
-async def response_formatter(
-    state: AgentState,
-    runtime: Runtime[Context],
-) -> dict[str, Any]:
-    run_id = state.get("run_id", "")
-    log_event("INFO", "Node started", node="response_formatter", run_id=run_id)
-
-    tool_results = state.get("tool_results") or []
-    customer_ctx = state.get("customer_context") or {}
-    customer = customer_ctx.get("customer") or {}
-    customer_name = customer.get("full_name", "Hello")
-
-    if tool_results:
-        last = tool_results[-1]
-        tool_name = last.get("tool", "")
-        result = last.get("result", {})
-
-        if isinstance(result, str):
-            try:
-                result = json.loads(result)
-            except Exception:
-                result = {"text": result}
-        if not isinstance(result, dict):
-            result = {"text": str(result)}
-
-        # ---- ERROR HANDLING (must come first) ----
-        if isinstance(result, dict) and result.get("error"):
-            return {
-                "final_response": f"{customer_name}, {result['error']}",
-                "resolution_type": "auto_resolved",
-            }
-
-        # Wallet credit
-        if tool_name == "issue_wallet_credit":
-            if result.get("status") == "issued":
-                amount = result.get("amount", "unknown")
-                txn_id = result.get("transaction_id", "")
-                return {
-                    "final_response": (
-                        f"{customer_name}, I've issued Rs.{amount} as store credit "
-                        f"(transaction #{txn_id}) for the inconvenience. "
-                        "This will reflect in your wallet within 24 hours. Is there anything else I can help with?"
-                    ),
-                    "resolution_type": "auto_resolved",
-                }
-            else:
-                return {
-                    "final_response": (
-                        f"{customer_name}, I tried to issue a credit but it was rejected: "
-                        f"{result.get('reason', 'unknown reason')}. I'll escalate this for you."
-                    ),
-                    "resolution_type": "escalated",
-                }
-
-        # Refund eligibility
-        if tool_name == "check_refund_eligibility":
-            if result.get("eligible"):
-                return {
-                    "final_response": (
-                        f"{customer_name}, your order is eligible for a refund of Rs.{result['amount']}. "
-                        "I can schedule a return pickup for you. Would you like to proceed?"
-                    ),
-                    "resolution_type": "auto_resolved",
-                }
-            else:
-                reason = result.get("reason", "not eligible")
-                return {
-                    "final_response": (
-                        f"{customer_name}, I checked your refund eligibility: {reason}. "
-                        "If you believe this is an error, I can escalate your case."
-                    ),
-                    "resolution_type": "auto_resolved",
-                }
-
-        # Return pickup
-        if tool_name == "schedule_return_pickup":
-            if result.get("status") == "scheduled":
-                pickup = result.get("pickup_date", "soon")
-                return {
-                    "final_response": (
-                        f"{customer_name}, a return pickup has been scheduled for {pickup}. "
-                        "Once the item is received and inspected, your refund will be processed within 5-7 business days."
-                    ),
-                    "resolution_type": "auto_resolved",
-                }
-            else:
-                reason = result.get("reason", "unknown")
-                return {
-                    "final_response": (
-                        f"{customer_name}, I couldn't schedule the pickup: {reason}. Let me escalate this for you."
-                    ),
-                    "resolution_type": "escalated",
-                }
-
-        # Fallback for any other successful tool call
-        return {
-            "final_response": f"{customer_name}, I've processed your request. Is there anything else I can help with?",
-            "resolution_type": "auto_resolved",
-        }
-
-    # No tool results - use the LLM's raw final_response
-    final_response = (
-        state.get("final_response") or "I wasn't able to process your request. Let me escalate it."
-    )
-    return {
-        "final_response": final_response,
-        "resolution_type": state.get("resolution_type", "auto_resolved"),
-        "ticket_id": state.get("ticket_id"),
-    }
-
-
-# ---------------------------------------------------------------------------
-# 6. HUMAN ESCALATE
-# ---------------------------------------------------------------------------
-TEAM_ROUTING = {
-    "wrong_item_delivered": "order_fulfillment",
-    "damaged_product": "service_center",
-    "late_delivery": "logistics",
-    "refund_status": "payments",
-    "cancellation_request": "order_fulfillment",
-    "return_request": "order_fulfillment",
-    "warranty_claim": "service_center",
-    "payment_issue": "payments",
-    "account_issue": "senior_support",
-    "general_inquiry": "general_support",
-    "complaint": "senior_support",
-}
-
-
-async def human_escalate(
-    state: AgentState,
-    runtime: Runtime[Context],
-) -> dict[str, Any]:
+async def human_escalate(state: AgentState, runtime: Runtime[Context]) -> dict[str, Any]:
     mcp_client = runtime.context.mcp_client
     run_id = state.get("run_id", "")
-
     log_event("INFO", "Node started", node="human_escalate", run_id=run_id)
 
     classification = state.get("classification", {})
@@ -744,14 +328,13 @@ async def human_escalate(
     customer = customer_ctx.get("customer") or {}
     urgency = classification.get("urgency", 5)
     intent = classification.get("intent", "general_inquiry")
-
     priority = "critical" if urgency >= 9 else "high" if urgency >= 7 else "medium"
     sla = "2 hours" if urgency >= 9 else "4 hours" if urgency >= 7 else "24 hours"
-    team = TEAM_ROUTING.get(intent, "general_support")
+    team = _default_team(intent)
 
     ticket_id = "unknown"
     try:
-        ticket_id = await mcp_client.call_tool(
+        raw = await mcp_client.call_tool(
             "create_ticket",
             {
                 "user_id": state.get("user_id", "unknown"),
@@ -762,6 +345,9 @@ async def human_escalate(
             },
             run_id=run_id,
         )
+        ticket_id = _safe_extract_data(raw)
+        if not isinstance(ticket_id, str):
+            ticket_id = str(ticket_id) if ticket_id else "unknown"
         log_event(
             "INFO",
             "Ticket created",
@@ -775,9 +361,9 @@ async def human_escalate(
 
     customer_name = customer.get("full_name", "Hello")
     response = (
-        f"{customer_name}, your issue has been flagged as "
-        f"{priority} priority. A {team.replace('_', ' ')} specialist will review "
-        f"your case within {sla}. Your reference number is {ticket_id}."
+        f"{customer_name}, your issue has been flagged as {priority} priority. "
+        f"A {team.replace('_', ' ')} specialist will review your case within {sla}. "
+        f"Your reference number is {ticket_id}."
     )
     return {
         "ticket_id": ticket_id,

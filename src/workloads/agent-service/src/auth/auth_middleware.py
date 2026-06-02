@@ -1,5 +1,6 @@
+# auth/auth_middleware.py — Final
 """
-Middleware that extracts user identity from a JWT (if present).
+Middleware that extracts user identity from JWT if present.
 """
 
 from __future__ import annotations

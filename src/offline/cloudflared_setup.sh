@@ -1,56 +1,78 @@
 #!/bin/bash
 # =============================================================================
-# AgentOps — Local Cloudflared Tunnel Setup (Run Existing Tunnel)
+# AgentOps — Local Cloudflared Tunnel Setup (Idempotent, No Login)
 # =============================================================================
-# Prerequisites:
-#   1. Cloudflare resources already created via OpenTofu (src/infra/cloudflare)
-#   2. cloudflared installed
-#   3. agent-service running on http://localhost:8000
+# Uses tunnel token + credentials file directly. No browser login required.
 #
 # Usage:
 #   bash src/offline/cloudflared_setup.sh
+#
+# Stop:
+#   pkill -f "cloudflared tunnel run"
 # =============================================================================
 set -euo pipefail
 
 DOMAIN="${DOMAIN:-athithya.site}"
 AGENT_PORT="${AGENT_PORT:-8000}"
+CONFIG_DIR="${HOME}/.cloudflared"
+CONFIG_FILE="${CONFIG_DIR}/agentops-tunnel.yml"
+
+# ── 0. Kill any existing cloudflared process ────────────────────────
+if pgrep -f "cloudflared tunnel run" >/dev/null 2>&1; then
+  echo "[INFO] Stopping existing cloudflared process..."
+  pkill -f "cloudflared tunnel run" 2>/dev/null || true
+  sleep 1
+fi
 
 # ── 1. Verify agent-service is reachable ───────────────────────────
 echo "[INFO] Checking agent-service on http://localhost:${AGENT_PORT}..."
 if ! curl -sf --max-time 2 "http://localhost:${AGENT_PORT}/healthz" >/dev/null 2>&1; then
-  echo "[ERROR] Agent service is NOT reachable on http://localhost:${AGENT_PORT}"
-  echo "        Start it first (see src/offline/commands.sh)."
+  echo "[ERROR] Agent service is NOT reachable."
+  echo "        Start it first: bash src/offline/commands.sh"
   exit 1
 fi
 echo "[INFO] Agent service is reachable."
 
 # ── 2. Fetch tunnel credentials from OpenTofu outputs ──────────────
-TUNNEL_ID="$(tofu -chdir=src/infra/cloudflare output -raw cloudflare_tunnel_id 2>/dev/null)"
-TUNNEL_TOKEN="$(tofu -chdir=src/infra/cloudflare output -raw cloudflare_tunnel_token 2>/dev/null)"
+TUNNEL_ID="$(tofu -chdir=src/infra/cloudflare output -raw cloudflare_tunnel_id 2>/dev/null || echo '')"
+TUNNEL_TOKEN="$(tofu -chdir=src/infra/cloudflare output -raw cloudflare_tunnel_token 2>/dev/null || echo '')"
 
 if [[ -z "${TUNNEL_ID}" || "${TUNNEL_ID}" == "null" ]]; then
-  echo "[ERROR] Could not read tunnel ID from OpenTofu."
-  echo "        Run 'bash src/infra/cloudflare/run.sh --apply' first."
-  exit 1
-fi
-
-if [[ -z "${TUNNEL_TOKEN}" || "${TUNNEL_TOKEN}" == "null" ]]; then
-  echo "[ERROR] Could not read tunnel token from OpenTofu."
+  echo "[ERROR] No tunnel found in OpenTofu state."
+  echo "        Create it first:  bash src/infra/cloudflare/run.sh --apply"
   exit 1
 fi
 
 echo "[INFO] Tunnel ID: ${TUNNEL_ID}"
 
-# ── 3. Login to cloudflared (one-time, stores cert in ~/.cloudflared) ──
-echo "[INFO] Authenticating cloudflared..."
-cloudflared tunnel login --no-open-browser 2>/dev/null || true
+# ── 3. Ensure credentials file exists (idempotent) ─────────────────
+CRED_FILE="${CONFIG_DIR}/${TUNNEL_ID}.json"
+if [[ ! -f "${CRED_FILE}" ]]; then
+  echo "[INFO] Credentials file missing. Creating from Cloudflare API..."
+  
+  : "${CLOUDFLARE_ACCOUNT_ID:?export CLOUDFLARE_ACCOUNT_ID first}"
 
-# ── 4. Write cloudflared config with selective ingress ─────────────
-mkdir -p ~/.cloudflared
+  # Fetch tunnel token JSON and write to credentials file
+  curl -sf -X GET \
+    "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/cfd_tunnel/${TUNNEL_ID}/token" \
+    -H "Authorization: Bearer ${CLOUDFLARE_GLOBAL_API_KEY}" \
+    -H "Content-Type: application/json" \
+    -o "${CRED_FILE}" || {
+      echo "[WARN] API fetch failed. Creating minimal cred file."
+      echo "{\"AccountTag\":\"${CLOUDFLARE_ACCOUNT_ID}\",\"TunnelID\":\"${TUNNEL_ID}\",\"TunnelName\":\"agentops-tunnel\"}" > "${CRED_FILE}"
+    }
+  echo "[INFO] Credentials written to ${CRED_FILE}"
+else
+  echo "[INFO] Credentials file already exists: ${CRED_FILE}"
+fi
 
-cat > ~/.cloudflared/agentops-tunnel.yml << YAML
+# ── 4. Write cloudflared config (idempotent — overwrites) ──────────
+mkdir -p "${CONFIG_DIR}"
+
+cat > "${CONFIG_FILE}" << YAML
 tunnel: ${TUNNEL_ID}
-credentials-file: /root/.cloudflared/${TUNNEL_ID}.json
+credentials-file: ${CRED_FILE}
+no-autoupdate: true
 
 ingress:
   # Block internal health endpoints from public access
@@ -73,7 +95,11 @@ ingress:
     originRequest:
       connectTimeout: "10s"
       keepAliveTimeout: "120s"
-      disableChunkedEncoding: false
+      
+  # Admin dashboard + API
+  - hostname: ${DOMAIN}
+    path: /admin/*
+    service: http://localhost:${AGENT_PORT}
 
   # JWKS endpoint
   - hostname: ${DOMAIN}
@@ -86,18 +112,41 @@ ingress:
     service: http://localhost:${AGENT_PORT}
     originRequest:
       connectTimeout: "10s"
-      keepAliveTimeout: "60s"
-      disableChunkedEncoding: false
 
   # Catch-all: reject everything else
   - service: http_status:404
 YAML
 
-echo "[INFO] Config written to ~/.cloudflared/agentops-tunnel.yml"
+echo "[INFO] Config written to ${CONFIG_FILE}"
 
 # ── 5. Start cloudflared with the existing tunnel ──────────────────
-echo "[INFO] Starting cloudflared tunnel → https://${DOMAIN} → localhost:${AGENT_PORT}"
-echo "[INFO] Press Ctrl+C to stop."
-
 export TUNNEL_TOKEN
-cloudflared tunnel run --config ~/.cloudflared/agentops-tunnel.yml "${TUNNEL_ID}"
+
+echo "[INFO] Starting cloudflared → https://${DOMAIN} → localhost:${AGENT_PORT}"
+echo "[INFO] Logs: /tmp/cloudflared.log"
+echo "[INFO] To stop: pkill -f 'cloudflared tunnel run'"
+echo ""
+
+nohup cloudflared tunnel --config "${CONFIG_FILE}" run "${TUNNEL_ID}" \
+  > /tmp/cloudflared.log 2>&1 &
+CLOUDFLARED_PID=$!
+
+sleep 4
+
+# Check both PID file and actual process
+if kill -0 "${CLOUDFLARED_PID}" 2>/dev/null; then
+  echo "[INFO] Tunnel is running (PID ${CLOUDFLARED_PID})"
+elif pgrep -f "cloudflared.*tunnel.*run" >/dev/null 2>&1; then
+  echo "[INFO] Tunnel is running (found via pgrep)"
+else
+  # Check if logs show successful registration
+  if grep -q "Registered tunnel connection" /tmp/cloudflared.log 2>/dev/null; then
+    echo "[INFO] Tunnel appears to be running (connections registered in log)"
+  else
+    echo "[ERROR] Tunnel may have failed. Last 10 lines:"
+    tail -10 /tmp/cloudflared.log
+    exit 1
+  fi
+fi
+
+echo "[INFO] Visit: https://${DOMAIN}"

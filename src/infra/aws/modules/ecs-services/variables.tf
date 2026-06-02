@@ -70,7 +70,7 @@ variable "agent_cpu" {
 
 variable "agent_memory" {
   type    = number
-  default = 1024
+  default = 824
 }
 
 variable "mcp_cpu" {
