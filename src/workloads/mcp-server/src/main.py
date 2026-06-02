@@ -1,12 +1,12 @@
 """
 MCP Server – entrypoint.
 
-Exposes only 3 tools for the pragmatic agent:
+Exposes 3 tools for the pragmatic agent:
 - lookup_customer
 - get_recent_orders
 - create_ticket
 
-Runs DB migration on startup to add summary/suggested_action columns.
+Runs DB migration on startup (idempotent).
 """
 
 from __future__ import annotations
@@ -74,9 +74,8 @@ async def app_lifespan(server: FastMCP):
     _pool = await _db.create_pool()
     _log_tool("INFO", "Database pool ready", tool="lifespan")
 
-    # Run migration to ensure new columns exist
+    # Apply migrations (safe to run every startup)
     await _db.migrate_tickets_table(_pool)
-    _log_tool("INFO", "Database migration complete", tool="lifespan")
 
     try:
         yield {"pool": _pool}

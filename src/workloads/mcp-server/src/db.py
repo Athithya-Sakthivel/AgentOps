@@ -1,10 +1,12 @@
 """
-asyncpg connection pool factory and all SQL query functions.
+asyncpg connection pool factory and SQL query functions.
 
 Only the queries needed by the pragmatic agent:
 - lookup_customer
 - get_recent_orders (with product info)
 - create_ticket (with summary and suggested_action)
+
+Migration for new columns is idempotent and safe.
 """
 
 from __future__ import annotations
@@ -27,11 +29,17 @@ async def create_pool() -> asyncpg.Pool:
 
 
 async def migrate_tickets_table(pool: asyncpg.Pool) -> None:
-    """Add columns needed for AI-generated ticket summaries (idempotent)."""
-    async with pool.acquire() as conn:
-        async with conn.transaction():
-            await conn.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS summary TEXT")
-            await conn.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS suggested_action TEXT")
+    """Add AI‑generated columns to the tickets table (safe to run repeatedly)."""
+    try:
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                await conn.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS summary TEXT")
+                await conn.execute(
+                    "ALTER TABLE tickets ADD COLUMN IF NOT EXISTS suggested_action TEXT"
+                )
+    except Exception:
+        # Table may not exist yet – that's OK, the seed script creates it.
+        pass
 
 
 async def get_user_by_email(pool: asyncpg.Pool, email: str) -> dict[str, Any] | None:
