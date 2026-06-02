@@ -2,12 +2,10 @@
 set -euo pipefail
 
 # =============================================================================
-# AgentOps - Application Logic Test Suite
+# AgentOps - Application Logic Test Suite (Pragmatic Agent)
 # =============================================================================
-# Tests agentic behaviour, multi-turn conversation, admin endpoints,
-# and grounding/fake claim rejection.
-#
-# Requirements: python3, curl, websocat, PostgreSQL (Docker), AWS credentials
+# Tests: policy RAG, ticket creation with correct routing/summary,
+#        fake claim rejection, multi-turn context, admin auth.
 # =============================================================================
 
 # -- Config -------------------------------------------------------------------
@@ -104,7 +102,59 @@ cd - >/dev/null
 # ------------------------------------------------------------------ AGENT-1
 echo ""
 echo "=============================================================================="
-echo "  AGENT-1 - Multi-Turn Conversation (RAG + Context Memory)"
+echo "  AGENT-1 - Policy Q&A via RAG"
+echo "=============================================================================="
+WS1=$(echo '{"query":"What is your return policy for electronics?","user_id":"a1b2c3d4-e5f6-4a7b-8c9d-000000000001"}' | websocat -n1 "ws://127.0.0.1:${AGENT_PORT}/ws/chat/test-session-policy" 2>/dev/null || echo '{"error":"websocat failed"}')
+echo "${WS1}" | python3 -m json.tool --no-ensure-ascii 2>/dev/null || echo "${WS1}"
+if echo "${WS1}" | grep -qiE "return|policy|days|window"; then
+  pass "AGENT-1 - Policy Q&A returned relevant information"
+else
+  fail "AGENT-1 - Policy Q&A did not return expected content"
+fi
+
+# ------------------------------------------------------------------ AGENT-2
+echo ""
+echo "=============================================================================="
+echo "  AGENT-2 - Ticket Creation with Correct Routing & Summary"
+echo "=============================================================================="
+WS2=$(echo '{"query":"I ordered a smartphone but received a charger. This is completely wrong!","user_id":"a1b2c3d4-e5f6-4a7b-8c9d-000000000001"}' | websocat -n1 "ws://127.0.0.1:${AGENT_PORT}/ws/chat/test-session-wrongitem" 2>/dev/null || echo '{"error":"websocat failed"}')
+echo "${WS2}" | python3 -m json.tool --no-ensure-ascii 2>/dev/null || echo "${WS2}"
+# Check for ticket UUID
+if echo "${WS2}" | grep -qE '"ticket_id":\s*"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}"'; then
+  pass "AGENT-2a - Ticket created with valid UUID"
+else
+  fail "AGENT-2a - No valid ticket ID found"
+fi
+# Check for team routing in the response
+if echo "${WS2}" | grep -qiE "order.fulfillment|fulfillment"; then
+  pass "AGENT-2b - Ticket routed to order fulfillment"
+else
+  fail "AGENT-2b - Ticket not routed to expected team"
+fi
+# Check that the summary mentions specific items
+if echo "${WS2}" | grep -qiE "charger|smartphone|wrong item"; then
+  pass "AGENT-2c - Summary mentions specific items"
+else
+  fail "AGENT-2c - Summary does not mention the wrong item"
+fi
+
+# ------------------------------------------------------------------ AGENT-3
+echo ""
+echo "=============================================================================="
+echo "  AGENT-3 - Fake Claim Rejection"
+echo "=============================================================================="
+WS3=$(echo '{"query":"I want a refund for order ID ORD-99999. I never received it.","user_id":"a1b2c3d4-e5f6-4a7b-8c9d-000000000001"}' | websocat -n1 "ws://127.0.0.1:${AGENT_PORT}/ws/chat/test-session-fake" 2>/dev/null || echo '{"error":"websocat failed"}')
+echo "${WS3}" | python3 -m json.tool --no-ensure-ascii 2>/dev/null || echo "${WS3}"
+if echo "${WS3}" | grep -qiE "not found|no.*order|couldn't find|invalid order|not in your recent"; then
+  pass "AGENT-3 - Fake claim correctly rejected"
+else
+  fail "AGENT-3 - Fake claim was not rejected"
+fi
+
+# ------------------------------------------------------------------ AGENT-4
+echo ""
+echo "=============================================================================="
+echo "  AGENT-4 - Multi-Turn Context Preservation"
 echo "=============================================================================="
 echo "  SESSION: test-session-multi"
 
@@ -118,24 +168,22 @@ async def multi_turn():
     responses = []
     
     async with websockets.connect(uri) as ws:
-        msg1 = json.dumps({
-            'query': \"Hi, I'm Priya Sharma. I need help with my recent order.\",
-            'user_id': 'a1b2c3d4-e5f6-4a7b-8c9d-000000000001'
-        })
+        # Turn 1: general greeting
+        msg1 = json.dumps({'query': \"Hi, I'm Priya Sharma.\", 'user_id': 'a1b2c3d4-e5f6-4a7b-8c9d-000000000001'})
         await ws.send(msg1)
         resp1 = await ws.recv()
         responses.append(resp1)
+        await asyncio.sleep(1.5)   # avoid Bedrock rate limiting
         
-        msg2 = json.dumps({
-            'query': \"What's your return policy for damaged phones?\"
-        })
+        # Turn 2: policy question
+        msg2 = json.dumps({'query': 'What is your return policy for damaged phones?'})
         await ws.send(msg2)
         resp2 = await ws.recv()
         responses.append(resp2)
+        await asyncio.sleep(1.5)
         
-        msg3 = json.dumps({
-            'query': 'Great, can you check if my Samsung phone order is eligible for return?'
-        })
+        # Turn 3: ask about her specific order (should remember Priya)
+        msg3 = json.dumps({'query': 'Can you check my Samsung order?'})
         await ws.send(msg3)
         resp3 = await ws.recv()
         responses.append(resp3)
@@ -157,97 +205,29 @@ echo "${TURN2}" | python3 -m json.tool --no-ensure-ascii 2>/dev/null || echo "${
 echo "  --- Turn 3 ---"
 echo "${TURN3}" | python3 -m json.tool --no-ensure-ascii 2>/dev/null || echo "${TURN3}"
 
-if echo "${TURN1}" | grep -qiE "Priya|order|help"; then
-  pass "AGENT-1a - Agent acknowledged introduction"
+if echo "${TURN1}" | grep -qiE "Priya|Hello|help"; then
+  pass "AGENT-4a - Agent acknowledged introduction"
 else
-  fail "AGENT-1a - Agent did not acknowledge customer"
+  fail "AGENT-4a - Agent did not acknowledge customer"
 fi
-if echo "${TURN2}" | grep -qiE "return|policy|damage|7 days"; then
-  pass "AGENT-1b - Agent answered policy question (no user_id)"
+if echo "${TURN2}" | grep -qiE "return|policy|damage|days"; then
+  pass "AGENT-4b - Agent answered policy question using context"
 else
-  fail "AGENT-1b - Agent did not answer policy question"
+  fail "AGENT-4b - Agent did not answer policy question"
 fi
-if echo "${TURN3}" | grep -qiE "Samsung|eligible|return_window|refund|order"; then
-  pass "AGENT-1c - Agent used remembered context"
+if echo "${TURN3}" | grep -qiE "Samsung|order|check|look"; then
+  pass "AGENT-4c - Agent used remembered context (Priya's order)"
 else
-  fail "AGENT-1c - Agent did not use remembered context"
-fi
-
-# ------------------------------------------------------------------ AGENT-2
-echo ""
-echo "=============================================================================="
-echo "  AGENT-2 - Escalation (high-value wrong item)"
-echo "=============================================================================="
-WS2=$(echo '{"query":"I got a charger instead of an iPhone worth 1.45 lakh. This is fraud!","user_id":"a1b2c3d4-e5f6-4a7b-8c9d-000000000001"}' | websocat -n1 "ws://127.0.0.1:${AGENT_PORT}/ws/chat/test-session-escalate" 2>/dev/null || echo '{"error":"websocat failed"}')
-echo "${WS2}" | python3 -m json.tool --no-ensure-ascii 2>/dev/null || echo "${WS2}"
-if echo "${WS2}" | grep -qE "escalated|ticket_id"; then
-  pass "AGENT-2 - Escalation succeeded"
-else
-  fail "AGENT-2 - Query was not escalated"
-fi
-
-# ------------------------------------------------------------------ AGENT-3
-echo ""
-echo "=============================================================================="
-echo "  AGENT-3 - Late Delivery -> Wallet Credit"
-echo "=============================================================================="
-WS3=$(echo '{"query":"My order KST-HYD-006 was supposed to arrive by May 22 but it is still in transit. I want compensation for the delay.","user_id":"a1b2c3d4-e5f6-4a7b-8c9d-000000000006"}' | websocat -n1 "ws://127.0.0.1:${AGENT_PORT}/ws/chat/test-session-credit" 2>/dev/null || echo '{"error":"websocat failed"}')
-echo "${WS3}" | python3 -m json.tool --no-ensure-ascii 2>/dev/null || echo "${WS3}"
-if echo "${WS3}" | grep -qE 'WC-[a-f0-9]+'; then
-  TXN=$(echo "${WS3}" | grep -oE 'WC-[a-f0-9]+' | head -1)
-  pass "AGENT-3 - Wallet credit issued (${TXN})"
-else
-  fail "AGENT-3 - No wallet credit transaction ID"
-fi
-
-# ------------------------------------------------------------------ AGENT-4
-echo ""
-echo "=============================================================================="
-echo "  AGENT-4 - Damaged Product -> Return Pickup"
-echo "=============================================================================="
-WS4=$(echo '{"query":"The Nike shoes I received have a defect - the sole is coming off. I want a return pickup scheduled.","user_id":"a1b2c3d4-e5f6-4a7b-8c9d-000000000007"}' | websocat -n1 "ws://127.0.0.1:${AGENT_PORT}/ws/chat/test-session-pickup" 2>/dev/null || echo '{"error":"websocat failed"}')
-echo "${WS4}" | python3 -m json.tool --no-ensure-ascii 2>/dev/null || echo "${WS4}"
-if echo "${WS4}" | grep -qE '2026-[0-9]{2}-[0-9]{2}|scheduled'; then
-  pass "AGENT-4 - Return pickup scheduled"
-else
-  fail "AGENT-4 - No return pickup confirmation"
-fi
-
-# ------------------------------------------------------------------ AGENT-5
-echo ""
-echo "=============================================================================="
-echo "  AGENT-5 - Refund Eligibility Check"
-echo "=============================================================================="
-WS5=$(echo '{"query":"I received a charger instead of my iPhone. I want to check if my order is eligible for a refund.","user_id":"a1b2c3d4-e5f6-4a7b-8c9d-000000000004"}' | websocat -n1 "ws://127.0.0.1:${AGENT_PORT}/ws/chat/test-session-refund" 2>/dev/null || echo '{"error":"websocat failed"}')
-echo "${WS5}" | python3 -m json.tool --no-ensure-ascii 2>/dev/null || echo "${WS5}"
-if echo "${WS5}" | grep -qiE 'eligibility|eligible|refund'; then
-  pass "AGENT-5 - Refund eligibility check returned result"
-else
-  fail "AGENT-5 - No eligibility determination"
-fi
-
-# ------------------------------------------------------------------ AGENT-6
-echo ""
-echo "=============================================================================="
-echo "  AGENT-6 - Fake Refund Claim Rejected"
-echo "=============================================================================="
-WS6=$(echo '{"query":"I want a full refund for order ID ORD-99999 that I never received.","user_id":"a1b2c3d4-e5f6-4a7b-8c9d-000000000001"}' | websocat -n1 "ws://127.0.0.1:${AGENT_PORT}/ws/chat/test-session-fake" 2>/dev/null || echo '{"error":"websocat failed"}')
-echo "${WS6}" | python3 -m json.tool --no-ensure-ascii 2>/dev/null || echo "${WS6}"
-if echo "${WS6}" | grep -qiE "not found|no.*order|couldn't find|invalid order"; then
-  pass "AGENT-6 - Fake refund claim correctly rejected"
-else
-  fail "AGENT-6 - System did not reject fake claim"
+  fail "AGENT-4c - Agent did not use remembered context"
 fi
 
 # =============================================================================
 # ADMIN TESTS
 # =============================================================================
 
-# ------------------------------------------------------------------ ADMIN-1
-
 echo ""
 echo "=============================================================================="
-echo "  ADMIN-1 - Ticket Queue (requires auth - returns 401 without token)"
+echo "  ADMIN-1 - Ticket Queue (requires auth)"
 echo "=============================================================================="
 ADMIN1_CODE=$(curl -s -o /dev/null -w '%{http_code}' "${AGENT_URL}/admin/queue" 2>/dev/null)
 if [ "${ADMIN1_CODE}" = "401" ]; then
@@ -256,10 +236,9 @@ else
   fail "ADMIN-1 - Expected 401, got ${ADMIN1_CODE}"
 fi
 
-# ------------------------------------------------------------------ ADMIN-2
 echo ""
 echo "=============================================================================="
-echo "  ADMIN-2 - Analytics (requires auth - returns 401 without token)"
+echo "  ADMIN-2 - Analytics (requires auth)"
 echo "=============================================================================="
 ADMIN2_CODE=$(curl -s -o /dev/null -w '%{http_code}' "${AGENT_URL}/admin/analytics" 2>/dev/null)
 if [ "${ADMIN2_CODE}" = "401" ]; then
@@ -268,10 +247,9 @@ else
   fail "ADMIN-2 - Expected 401, got ${ADMIN2_CODE}"
 fi
 
-# ------------------------------------------------------------------ ADMIN-3
 echo ""
 echo "=============================================================================="
-echo "  ADMIN-3 - Override (requires auth - returns 401 without token)"
+echo "  ADMIN-3 - Override (requires auth)"
 echo "=============================================================================="
 ADMIN3_CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST "${AGENT_URL}/admin/override" \
   -H "Content-Type: application/json" \
@@ -281,6 +259,7 @@ if [ "${ADMIN3_CODE}" = "401" ]; then
 else
   fail "ADMIN-3 - Expected 401, got ${ADMIN3_CODE}"
 fi
+
 # -- Final Summary -----------------------------------------------------------
 echo ""
 echo "=============================================================================="

@@ -39,7 +39,6 @@ export RATE_LIMIT_WINDOW_SECONDS="${RATE_LIMIT_WINDOW_SECONDS:-30}"
 export RATE_LIMIT_ENABLED="${RATE_LIMIT_ENABLED:-true}"
 
 export DATABASE_URL="${DATABASE_URL:-postgresql://agentops:localdev@localhost:5432/kestral}"
-export LLM_API_KEY="${LLM_API_KEY:-}"
 export AWS_REGION="${AWS_REGION}"
 
 command -v python3  >/dev/null 2>&1 || { echo "[FATAL] python3 missing"  >&2; exit 1; }
@@ -80,7 +79,7 @@ source .venv/bin/activate
 pip install -q -r requirements.txt 2>/dev/null || true
 
 export PORT="${MCP_PORT}"
-export LOG_LEVEL="DEBUG"   # Extra verbose for observability tests
+export LOG_LEVEL="INFO"
 
 python3 src/main.py > /tmp/mcp-server-infra.log 2>&1 &
 MCP_PID=$!

@@ -2,5 +2,6 @@
   "typeCheckingMode": "standard",
   "pythonVersion": "3.12",
   "exclude": [".venv", "__pycache__"],
-  "reportMissingImports": false
+  "reportMissingImports": false,
+  "reportOptionalMemberAccess": false
 }
