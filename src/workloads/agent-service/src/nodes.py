@@ -73,7 +73,7 @@ def _default_team(intent: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# 1. Guardrail + Classifier (unchanged)
+# 1. Guardrail + Classifier
 # ---------------------------------------------------------------------------
 async def guardrail_classifier(state: AgentState, runtime: Runtime[Context]) -> dict[str, Any]:
     triage_program = runtime.context.triage_program
@@ -118,7 +118,7 @@ async def guardrail_classifier(state: AgentState, runtime: Runtime[Context]) -> 
 
 
 # ---------------------------------------------------------------------------
-# 2. Context Gatherer (unchanged)
+# 2. Context Gatherer
 # ---------------------------------------------------------------------------
 async def context_gatherer(state: AgentState, runtime: Runtime[Context]) -> dict[str, Any]:
     mcp_client = runtime.context.mcp_client
@@ -187,15 +187,20 @@ TICKET_ROUTER_SYSTEM_PROMPT = """You are Kestral's support triage specialist. Yo
 
 You have access to:
 - search_policies(query) - search internal policy documents
-- create_ticket(user_id, query_text, classification, priority, assigned_team, summary) - create a support ticket
+- create_ticket(user_id, query_text, classification, priority, assigned_team, summary, suggested_action) - create a support ticket
 
 Rules:
 1. Use the customer's name if you know it.
-2. If the query is a simple policy question, answer it using search_policies.
-3. For any issue that requires action (return, refund, complaint, etc.), create a ticket with a concise summary (2-3 sentences). Include specific order details when relevant.
-4. The assigned_team and priority are provided for you - use them exactly as given. Do not change them.
-5. Never promise a refund, credit, or pickup - just assure the customer that the right team will handle it.
-6. If the query is ambiguous, ask a clarifying question instead of guessing.
+2. If the query is a simple policy question, answer it using search_policies. Do NOT create a ticket for policy questions.
+3. Only create a ticket if the customer's issue requires human action (return, refund, complaint, replacement, investigation).
+4. When creating a ticket, the summary MUST include:
+   - The specific order ID and product name (from the "Recent orders" list)
+   - What the customer expected vs. what they received (if applicable)
+   - The exact policy rule that applies (if a policy was consulted)
+5. The assigned_team and priority are provided for you - use them exactly as given. Do not change them.
+6. Never promise a refund, credit, or pickup - just assure the customer that the right team will handle it.
+7. If the query is ambiguous, ask a clarifying question instead of guessing.
+8. When listing orders, use bullet points with format: "- Product Name (Order ID) - Status"
 
 Respond in JSON:
 - To call a tool: {"action": "tool_call", "tool": "<name>", "args": {<params>}}
@@ -267,7 +272,7 @@ async def ticket_router(state: AgentState, runtime: Runtime[Context]) -> dict[st
             except Exception as exc:
                 tool_output = {"error": str(exc)}
         elif tool_name == "create_ticket":
-            # Merge in the deterministic fields
+            # Merge in deterministic fields
             tool_args.setdefault("user_id", state.get("user_id"))
             tool_args.setdefault("query_text", query)
             tool_args.setdefault("classification", classification)
@@ -276,9 +281,10 @@ async def ticket_router(state: AgentState, runtime: Runtime[Context]) -> dict[st
                 "assigned_team",
                 _default_team(classification.get("intent", "general_inquiry")),
             )
-            # Ensure summary is present
             if "summary" not in tool_args:
-                tool_args["summary"] = query[:200]
+                tool_args["summary"] = query[:300]
+            if "suggested_action" not in tool_args:
+                tool_args["suggested_action"] = "Review the issue and take appropriate action."
             try:
                 raw_output = await mcp_client.call_tool(tool_name, tool_args, run_id=run_id)
                 ticket_id = _safe_extract_data(raw_output)

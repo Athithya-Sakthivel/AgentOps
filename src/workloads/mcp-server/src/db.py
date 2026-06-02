@@ -1,17 +1,15 @@
 """
 asyncpg connection pool factory and all SQL query functions.
 
-Designed for PgBouncer transaction mode:
-- No session-level features (SET, LISTEN, temporary tables).
-- Every query runs in its own transaction.
-
-Includes read queries (context tools) and write queries (ops tools).
+Only the queries needed by the pragmatic agent:
+- lookup_customer
+- get_recent_orders (with product info)
+- create_ticket (with summary and suggested_action)
 """
 
 from __future__ import annotations
 
 import json
-from decimal import Decimal
 from typing import Any
 
 import asyncpg
@@ -28,9 +26,12 @@ async def create_pool() -> asyncpg.Pool:
     )
 
 
-# ═══════════════════════════════════════════════════════════════════
-# READ QUERIES — Context Tools
-# ═══════════════════════════════════════════════════════════════════
+async def migrate_tickets_table(pool: asyncpg.Pool) -> None:
+    """Add columns needed for AI-generated ticket summaries (idempotent)."""
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            await conn.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS summary TEXT")
+            await conn.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS suggested_action TEXT")
 
 
 async def get_user_by_email(pool: asyncpg.Pool, email: str) -> dict[str, Any] | None:
@@ -66,7 +67,8 @@ async def get_recent_orders(
                    o.payment_method, o.shipping_address, o.pincode, o.city,
                    o.order_date, o.delivery_date, o.promised_delivery_date,
                    o.is_delayed, o.delivery_attempts, o.tracking_number, o.notes,
-                   p.name AS product_name, p.category, p.return_window_days
+                   p.name AS product_name, p.category, p.return_window_days,
+                   p.is_returnable
                    FROM orders o
                    JOIN products p ON o.product_id = p.id
                    WHERE o.user_id = $1
@@ -77,44 +79,6 @@ async def get_recent_orders(
     return [dict(r) for r in rows]
 
 
-async def get_order_with_product(pool: asyncpg.Pool, order_id: str) -> dict[str, Any] | None:
-    async with pool.acquire() as conn:
-        async with conn.transaction():
-            row = await conn.fetchrow(
-                "SELECT o.id, o.user_id, o.product_id, o.status, o.quantity, "
-                "o.amount, o.discount_amount, o.shipping_amount, o.cod_fee, "
-                "o.payment_method, o.shipping_address, o.pincode, o.city, "
-                "o.order_date, o.delivery_date, o.promised_delivery_date, "
-                "o.is_delayed, o.delivery_attempts, o.tracking_number, o.notes, "
-                "p.name AS product_name, p.category, p.subcategory, p.price, "
-                "p.return_window_days, p.warranty_months, p.is_returnable, "
-                "p.is_express_eligible "
-                "FROM orders o JOIN products p ON o.product_id = p.id "
-                "WHERE o.id = $1",
-                order_id,
-            )
-    return dict(row) if row else None
-
-
-async def get_billing_by_order(pool: asyncpg.Pool, order_id: str) -> list[dict[str, Any]]:
-    async with pool.acquire() as conn:
-        async with conn.transaction():
-            rows = await conn.fetch(
-                "SELECT id, order_id, user_id, transaction_type, amount, status, "
-                "refund_eligible, refund_reason, payment_gateway, "
-                "gateway_transaction_id, transaction_date, completed_date "
-                "FROM billing WHERE order_id = $1 "
-                "ORDER BY transaction_date DESC",
-                order_id,
-            )
-    return [dict(r) for r in rows]
-
-
-# ═══════════════════════════════════════════════════════════════════
-# WRITE QUERIES — Ops Tools
-# ═══════════════════════════════════════════════════════════════════
-
-
 async def insert_ticket(
     pool: asyncpg.Pool,
     user_id: str,
@@ -122,6 +86,8 @@ async def insert_ticket(
     classification: dict,
     priority: str,
     assigned_team: str = "general_support",
+    summary: str | None = None,
+    suggested_action: str | None = None,
 ) -> str:
     """Create a new ticket. Returns the ticket UUID."""
     async with pool.acquire() as conn:
@@ -129,76 +95,17 @@ async def insert_ticket(
             row = await conn.fetchrow(
                 """INSERT INTO tickets
                    (id, user_id, query_text, classification, resolution_type, status,
-                    priority, assigned_team, source, created_at, updated_at)
+                    priority, assigned_team, source, created_at, updated_at,
+                    summary, suggested_action)
                    VALUES (gen_random_uuid(), $1, $2, $3::jsonb, 'escalated', 'pending_human',
-                           $4, $5, 'chat', NOW(), NOW())
+                           $4, $5, 'chat', NOW(), NOW(), $6, $7)
                    RETURNING id""",
                 user_id,
                 query_text,
                 json.dumps(classification),
                 priority,
                 assigned_team,
+                summary,
+                suggested_action,
             )
     return str(row["id"])
-
-
-async def update_ticket_status(pool: asyncpg.Pool, ticket_id: str, status: str) -> None:
-    async with pool.acquire() as conn:
-        async with conn.transaction():
-            await conn.execute(
-                "UPDATE tickets SET status = $1, updated_at = NOW() WHERE id = $2",
-                status,
-                ticket_id,
-            )
-
-
-async def set_ticket_priority(pool: asyncpg.Pool, ticket_id: str, priority: str) -> None:
-    async with pool.acquire() as conn:
-        async with conn.transaction():
-            await conn.execute(
-                "UPDATE tickets SET priority = $1, updated_at = NOW() WHERE id = $2",
-                priority,
-                ticket_id,
-            )
-
-
-async def assign_ticket_team(pool: asyncpg.Pool, ticket_id: str, team: str) -> None:
-    async with pool.acquire() as conn:
-        async with conn.transaction():
-            await conn.execute(
-                "UPDATE tickets SET assigned_team = $1, updated_at = NOW() WHERE id = $2",
-                team,
-                ticket_id,
-            )
-
-
-async def issue_wallet_credit(
-    pool: asyncpg.Pool, user_id: str, amount: Decimal, reason: str
-) -> str:
-    """Record a wallet credit and return its transaction ID."""
-    async with pool.acquire() as conn:
-        async with conn.transaction():
-            row = await conn.fetchrow(
-                """INSERT INTO billing
-                   (id, order_id, user_id, transaction_type, amount, status,
-                    refund_eligible, refund_reason, payment_gateway,
-                    gateway_transaction_id, transaction_date, completed_date)
-                   VALUES (gen_random_uuid(), NULL, $1, 'wallet_credit', $2, 'completed',
-                           false, $3, 'kestral_wallet',
-                           'WC-' || substr(gen_random_uuid()::text, 1, 8), NOW(), NOW())
-                   RETURNING gateway_transaction_id""",
-                user_id,
-                amount,
-                reason,
-            )
-    return str(row["gateway_transaction_id"])
-
-
-async def schedule_return_pickup(pool: asyncpg.Pool, order_id: str, pickup_date: str) -> None:
-    async with pool.acquire() as conn:
-        async with conn.transaction():
-            await conn.execute(
-                "UPDATE orders SET status = 'return_initiated', notes = COALESCE(notes, '') || ' Return pickup: ' || $2 WHERE id = $1",
-                order_id,
-                pickup_date,
-            )

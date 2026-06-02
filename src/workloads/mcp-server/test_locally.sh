@@ -2,26 +2,23 @@
 set -euo pipefail
 
 # =============================================================================
-# MCP Server — Local Test (No Kubernetes, No OTEL, No Qdrant)
+# MCP Server — Local Test (3-tool pragmatic agent)
 # =============================================================================
-# Tests the 9 MCP tools against a local PostgreSQL instance.
+# Tests the 3 MCP tools against a local PostgreSQL instance.
 # Uses structured JSON logging with correlation IDs (run_id).
 # No OpenTelemetry, no vector database, no external dependencies except Docker.
 
 # --- Config ---------------------------------------------------------------
 MCP_PORT="${MCP_PORT:-8001}"
 MCP_URL="http://127.0.0.1:${MCP_PORT}"
-MCP_HTTP="${MCP_URL}/mcp"          # FastMCP HTTP transport
+MCP_HTTP="${MCP_URL}/mcp"
 
-# PostgreSQL (must be running via Docker, as set up by setup_postgres.py)
 POSTGRES_HOST="${POSTGRES_HOST:-localhost}"
 POSTGRES_PORT="${POSTGRES_PORT:-5432}"
 POSTGRES_USER="${POSTGRES_USER:-agentops}"
 POSTGRES_DB="${POSTGRES_DB:-kestral}"
-# Password is hardcoded 'localdev' in the seed script; we'll use it directly.
 DATABASE_URL="postgresql://agentops:localdev@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}"
 
-# We'll generate a unique run_id for each test to validate correlation.
 RUN_ID="test-$(date +%s)-$$"
 
 # --- Prerequisites ---------------------------------------------------------
@@ -58,7 +55,7 @@ record_fail() {
 }
 
 # =============================================================================
-# STEP 1: Verify PostgreSQL is running and reachable
+# STEP 1: Verify PostgreSQL
 # =============================================================================
 echo ""
 echo "=============================================================================="
@@ -73,7 +70,6 @@ else
   exit 1
 fi
 
-# Verify we can query the database
 if PGPASSWORD=localdev psql -h "${POSTGRES_HOST}" -p "${POSTGRES_PORT}" -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -c "SELECT 1;" >/dev/null 2>&1; then
   record_pass "PostgreSQL query" "SELECT 1 succeeded"
 else
@@ -82,14 +78,13 @@ else
 fi
 
 # =============================================================================
-# STEP 2: Start mcp-server as a local process
+# STEP 2: Start mcp-server
 # =============================================================================
 echo ""
 echo "=============================================================================="
 echo "[STEP 2/4] Starting mcp-server..."
 echo "=============================================================================="
 
-# Ensure we have a virtual environment with dependencies
 if [ ! -d .venv ]; then
   echo "  Creating virtual environment..."
   python3 -m venv .venv
@@ -129,7 +124,6 @@ if [[ ${READY} -eq 0 ]]; then
   exit 1
 fi
 
-# Quick check that the process started and log is being written
 sleep 1
 if grep -q "Database pool ready" /tmp/mcp-server.log 2>/dev/null; then
   echo "  Database pool: ready"
@@ -138,11 +132,11 @@ else
 fi
 
 # =============================================================================
-# STEP 4: Test all 9 tools (no search_policies)
+# STEP 4: Test the 3 MCP tools
 # =============================================================================
 echo ""
 echo "=============================================================================="
-echo "[STEP 4/4] Testing 9 MCP tools..."
+echo "[STEP 4/4] Testing 3 MCP tools..."
 echo "=============================================================================="
 
 run_tool() {
@@ -154,13 +148,12 @@ run_tool() {
   echo "  Arguments:   $*"
 
   local OUTPUT
-  OUTPUT=$(fastmcp call "${MCP_HTTP}" "${tool}" "$@" 2>&1 | grep -v "UserWarning\|oauth.py\|site-packages\|/fastmcp/client/auth/" || true)
+  OUTPUT=$(fastmcp call "${MCP_HTTP}" "${tool}" "$@" 2>&1 | grep -v "UserWarning\|oauth.py\|site-packages\|/fastmcp/client/auth/\|self._bind" || true)
 
   echo "  Response:"
   echo "${OUTPUT}" | head -30 | sed 's/^/    /'
 
-  # Simple validation: check for expected success indicators
-  if echo "${OUTPUT}" | grep -qE '"result"|"eligible"|"status"|"transaction_id"|"ticket_id"|[a-f0-9]{8}-[a-f0-9]{4}'; then
+  if echo "${OUTPUT}" | grep -qE '"id"|"full_name"|"product_name"|"ticket_id"|[a-f0-9]{8}-[a-f0-9]{4}'; then
     record_pass "${tool}" "Returned expected data"
   elif echo "${OUTPUT}" | grep -qi "error"; then
     record_fail "${tool}" "Tool returned an error — see response above"
@@ -169,56 +162,26 @@ run_tool() {
   fi
 }
 
-# --- Read tools ---
+# Tool 1
 run_tool "lookup_customer" \
   "Find customer by email" \
   email=priya.sharma@email.com run_id="${RUN_ID}"
 
+# Tool 2
 run_tool "get_recent_orders" \
-  "Return recent orders for user" \
+  "Return recent orders with product details" \
   user_id=a1b2c3d4-e5f6-4a7b-8c9d-000000000001 run_id="${RUN_ID}"
 
-run_tool "get_order_details" \
-  "Return full order details" \
-  order_id=c3d4e5f6-a7b8-4c9d-0e1f-000000000001 run_id="${RUN_ID}"
-
-run_tool "check_refund_eligibility" \
-  "Check refund eligibility" \
-  order_id=c3d4e5f6-a7b8-4c9d-0e1f-000000000004 run_id="${RUN_ID}"
-
-# --- Action tools ---
-run_tool "issue_wallet_credit" \
-  "Issue wallet credit" \
-  user_id=a1b2c3d4-e5f6-4a7b-8c9d-000000000001 \
-  amount=100.0 \
-  reason="Test compensation" \
-  run_id="${RUN_ID}"
-
-run_tool "schedule_return_pickup" \
-  "Schedule return pickup" \
-  order_id=c3d4e5f6-a7b8-4c9d-0e1f-000000000001 \
-  pickup_date="2026-06-01" \
-  run_id="${RUN_ID}"
-
-# --- Escalation tools ---
+# Tool 3
 run_tool "create_ticket" \
-  "Create support ticket" \
+  "Create support ticket with AI summary and suggested action" \
   user_id=a1b2c3d4-e5f6-4a7b-8c9d-000000000001 \
-  query_text="Test ticket from local test" \
-  classification='{"intent":"test","urgency":5,"sentiment":"neutral","auto_resolvable":true}' \
-  priority=medium \
-  assigned_team=general_support \
-  run_id="${RUN_ID}"
-
-run_tool "escalate_to_human" \
-  "Escalate a ticket" \
-  ticket_id=e5f6a7b8-c9d0-4e1f-2a3b-000000000001 \
-  run_id="${RUN_ID}"
-
-run_tool "route_to_team" \
-  "Route ticket to team" \
-  ticket_id=e5f6a7b8-c9d0-4e1f-2a3b-000000000001 \
-  team=payments \
+  query_text="I received a charger instead of a phone" \
+  classification='{"intent":"wrong_item_delivered","urgency":7,"sentiment":"frustrated","auto_resolvable":false}' \
+  priority=high \
+  assigned_team=order_fulfillment \
+  summary="Customer expected Samsung Galaxy S25 Ultra, received a charger." \
+  suggested_action="Verify shipment, initiate return pickup, and ship correct phone." \
   run_id="${RUN_ID}"
 
 # =============================================================================
@@ -226,23 +189,30 @@ run_tool "route_to_team" \
 # =============================================================================
 echo ""
 echo "--- Verifying registered tools ---"
-TOOL_LIST=$(fastmcp list "${MCP_HTTP}" 2>&1 | grep -v "UserWarning\|oauth.py\|site-packages\|/fastmcp/client/auth/" || true)
+TOOL_LIST=$(fastmcp list "${MCP_HTTP}" 2>&1 | grep -v "UserWarning\|oauth.py\|site-packages\|/fastmcp/client/auth/\|self._bind" || true)
 echo "${TOOL_LIST}"
-# To this (exclude the "Tools (9)" header line):
-TOOL_COUNT=$(echo "${TOOL_LIST}" | grep -cE "^\s{2}[a-z_]+\(.*\)" || true)
+
+# Count tools by looking for the 3 expected tool names
+EXPECTED_TOOLS=("lookup_customer" "get_recent_orders" "create_ticket")
+TOOL_COUNT=0
+for tool_name in "${EXPECTED_TOOLS[@]}"; do
+  if echo "${TOOL_LIST}" | grep -q "${tool_name}"; then
+    TOOL_COUNT=$((TOOL_COUNT + 1))
+  fi
+done
+
 echo "  Tools registered: ${TOOL_COUNT}"
-if [[ "${TOOL_COUNT}" -eq 9 ]]; then
-  record_pass "9 tools registered" "All 9 tools present"
+if [[ "${TOOL_COUNT}" -eq 3 ]]; then
+  record_pass "3 tools registered" "All 3 tools present"
 else
-  record_fail "9 tools registered" "Found ${TOOL_COUNT}, expected 9"
+  record_fail "3 tools registered" "Found ${TOOL_COUNT}, expected 3"
 fi
 
 # =============================================================================
-# Check structured logging (correlation ID)
+# Check structured logging
 # =============================================================================
 echo ""
 echo "--- Checking structured logs for run_id: ${RUN_ID} ---"
-
 LOG_LINES=$(grep "${RUN_ID}" /tmp/mcp-server.log 2>/dev/null || echo "")
 if [[ -n "${LOG_LINES}" ]]; then
   LINE_COUNT=$(echo "${LOG_LINES}" | wc -l)

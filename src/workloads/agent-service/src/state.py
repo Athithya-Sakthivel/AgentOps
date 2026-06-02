@@ -1,5 +1,5 @@
 # =============================================================================
-# state.py - Minimal agent state (classifier + router)
+# state.py - Minimal agent state (classifier + context + router)
 # =============================================================================
 from __future__ import annotations
 

@@ -510,8 +510,7 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                 state["query_text"] = query
                 state["run_id"] = run_id
                 state["user_email"] = user_email
-                state["action_taken"] = False
-                state["tool_results"] = []
+                state["resolution_type"] = None
                 state["final_response"] = None
                 state["error"] = None
                 if data.get("user_id"):
@@ -529,8 +528,6 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                     "guardrail_rejected": False,
                     "classification": None,
                     "customer_context": None,
-                    "action_taken": False,
-                    "tool_results": [],
                     "resolution_type": None,
                     "ticket_id": None,
                     "final_response": None,

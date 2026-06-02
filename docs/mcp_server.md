@@ -1,16 +1,21 @@
-# MCP Server — AgentOps Tool Suite
+# MCP Server — Ideal Specification (Rebuild Target)
 
-The **mcp‑server** exposes **9 tools** over MCP using FastMCP 3.3.1 and HTTP transport. The agent‑service calls these tools to look up customers, retrieve orders, check refund eligibility, issue compensation, schedule returns, create tickets, escalate, and route to human teams.
+## Overview
 
-Policy search has been moved inline to the agent‑service (S3 + Bedrock + NumPy, no vector database).
+The MCP server exposes **three tools** over HTTP using FastMCP.  
+It is the **data layer** for the agent.  It never contains business logic, validation, or decision‑making.  That stays in the agent‑service.
+
+The three tools:
+
+1. **`lookup_customer`** – find a customer by email or phone  
+2. **`get_recent_orders`** – retrieve the 5 most recent orders (with product details)  
+3. **`create_ticket`** – create a support ticket with a rich summary and a suggested action
+
+All other capabilities (policy search, team routing, summarisation) live in the agent‑service.
 
 ---
 
-## Tools
-
-### 1. `lookup_customer`
-
-Find a customer by their email address or phone number.
+## 1. `lookup_customer`
 
 **Input**
 ```json
@@ -22,25 +27,21 @@ Find a customer by their email address or phone number.
 **Output**
 ```json
 {
-  "result": {
-    "id": "a1b2c3d4-e5f6-4a7b-8c9d-000000000001",
-    "full_name": "Priya Sharma",
-    "email": "priya.sharma@email.com",
-    "phone": "+919876543210",
-    "language_pref": "en",
-    "segment": "premium",
-    "created_at": "2025-01-15T10:30:00Z"
-  }
+  "id": "a1b2c3d4-e5f6-4a7b-8c9d-000000000001",
+  "full_name": "Priya Sharma",
+  "email": "priya.sharma@email.com",
+  "phone": "+919876543210",
+  "language_pref": "en",
+  "segment": "premium",
+  "created_at": "2025-01-15T10:30:00Z"
 }
 ```
 
-Returns `null` / empty if no customer matches the given email or phone.
+Returns `null` if no customer matches.
 
 ---
 
-### 2. `get_recent_orders`
-
-Return the 5 most recent orders for a customer, newest first.
+## 2. `get_recent_orders`
 
 **Input**
 ```json
@@ -49,242 +50,93 @@ Return the 5 most recent orders for a customer, newest first.
 }
 ```
 
-**Output** (truncated — up to 5 orders)
+**Output** (up to 5 orders, newest first)
 ```json
-{
-  "result": [
-    {
-      "id": "c3d4e5f6-a7b8-4c9d-0e1f-000000000021",
-      "user_id": "a1b2c3d4-e5f6-4a7b-8c9d-000000000001",
-      "product_id": "b2c3d4e5-f6a7-4b8c-9d0e-000000000008",
-      "status": "cancelled",
-      "amount": "2499.00",
-      "payment_method": "upi",
-      "order_date": "2026-05-20T09:00:00Z",
-      "delivery_date": null,
-      "tracking_number": null
-    },
-    {
-      "id": "c3d4e5f6-a7b8-4c9d-0e1f-000000000001",
-      "status": "delivered",
-      "amount": "124999.00",
-      "payment_method": "upi",
-      "delivery_date": "2026-05-14T14:00:00Z",
-      "tracking_number": "KST-BLR-001"
-    }
-  ]
-}
-```
-
-Returns an empty list `[]` if the customer has no orders.
-
----
-
-### 3. `get_order_details`
-
-Full order information including the product it contains (joined from the products table).
-
-**Input**
-```json
-{
-  "order_id": "c3d4e5f6-a7b8-4c9d-0e1f-000000000001"
-}
-```
-
-**Output**
-```json
-{
-  "result": {
-    "id": "c3d4e5f6-a7b8-4c9d-0e1f-000000000001",
-    "user_id": "a1b2c3d4-e5f6-4a7b-8c9d-000000000001",
-    "product_id": "b2c3d4e5-f6a7-4b8c-9d0e-000000000001",
+[
+  {
+    "id": "c3d4e5f6-...",
     "status": "delivered",
     "amount": "124999.00",
-    "payment_method": "upi",
     "order_date": "2026-05-10T10:00:00Z",
     "delivery_date": "2026-05-14T14:00:00Z",
     "tracking_number": "KST-BLR-001",
     "product_name": "Samsung Galaxy S25 Ultra 5G",
-    "category": "electronics",
     "return_window_days": 10,
-    "warranty_months": 12,
     "is_returnable": true
   }
-}
+]
 ```
 
-Returns `null` / empty if the order is not found.
+Returns an empty array if the customer has no orders.
 
 ---
 
-### 4. `check_refund_eligibility`
+## 3. `create_ticket`
 
-Determine whether an order can be refunded, and if so, for how much and via which method. Examines the return window, product category, and existing billing rows.
+This is the **only write operation** the agent ever performs.  
+It accepts the same fields as the old tool, plus **two new fields** that make the ticket immediately useful to a human resolver.
 
 **Input**
 ```json
 {
-  "order_id": "c3d4e5f6-a7b8-4c9d-0e1f-000000000004"
+  "user_id": "a1b2c3d4-...",
+  "query_text": "I ordered a smartphone but got a charger.",
+  "classification": {
+    "intent": "wrong_item_delivered",
+    "urgency": 7,
+    "sentiment": "frustrated",
+    "auto_resolvable": false
+  },
+  "priority": "high",
+  "assigned_team": "order_fulfillment",
+  "summary": "Customer received a charger instead of the Samsung Galaxy S25 Ultra (order #KST-BLR-9901). Needs immediate replacement and investigation.",
+  "suggested_action": "Verify shipment, initiate return pickup for incorrect item, and ship correct phone with expedited delivery."
 }
 ```
 
-**Output (ineligible)**
-```json
-{
-  "eligible": false,
-  "reason": "return_window_expired (10 days)"
-}
-```
-
-**Output (eligible)**
-```json
-{
-  "eligible": true,
-  "reason": "within_return_window",
-  "amount": "2499.00",
-  "method": "upi"
-}
-```
-
-Possible `reason` values: `order_not_found`, `already_refunded`, `return_window_expired (N days)`, `no_payment_found`, `category_not_returnable`, `within_return_window`.
-
----
-
-### 5. `issue_wallet_credit`
-
-Add store credit to a customer's wallet (e.g. delivery delay compensation or goodwill gesture). **Hard limit:** amounts greater than Rs.500 are rejected.
-
-**Input**
-```json
-{
-  "user_id": "a1b2c3d4-e5f6-4a7b-8c9d-000000000001",
-  "amount": 100.0,
-  "reason": "Delivery delay compensation"
-}
-```
-
-**Output (accepted)**
-```json
-{
-  "status": "issued",
-  "transaction_id": "WC-87e27c9c",
-  "amount": 100.0
-}
-```
-
-**Output (rejected)**
-```json
-{
-  "status": "rejected",
-  "reason": "Amount exceeds maximum of Rs.500"
-}
-```
-
----
-
-### 6. `schedule_return_pickup`
-
-Schedule a return pickup for an order. **Guardrail:** internally calls `check_refund_eligibility` first — the pickup is only scheduled if the order is eligible.
-
-**Input**
-```json
-{
-  "order_id": "c3d4e5f6-a7b8-4c9d-0e1f-000000000001",
-  "pickup_date": "2026-06-01"
-}
-```
-
-**Output (scheduled)**
-```json
-{
-  "status": "scheduled",
-  "order_id": "c3d4e5f6-a7b8-4c9d-0e1f-000000000001",
-  "pickup_date": "2026-06-01"
-}
-```
-
-**Output (rejected — return window expired)**
-```json
-{
-  "status": "failed",
-  "reason": "return_window_expired (10 days)"
-}
-```
-
-Side effect: updates the order status to `return_initiated` and appends the pickup date to the order notes.
-
----
-
-### 7. `create_ticket`
-
-Create a new support ticket in the database. The ticket is created with status `pending_human`, resolution type `escalated`, and assigned to a team.
-
-**Input**
-```json
-{
-  "user_id": "a1b2c3d4-e5f6-4a7b-8c9d-000000000001",
-  "query_text": "Test ticket from battle test",
-  "classification": {"intent": "test", "urgency": 5, "sentiment": "neutral", "auto_resolvable": true},
-  "priority": "medium",
-  "assigned_team": "general_support"
-}
-```
+| Field | Required | Description |
+|-------|----------|-------------|
+| `user_id` | Yes | UUID of the customer |
+| `query_text` | Yes | Original message from the customer |
+| `classification` | Yes | DSPy output (intent, urgency, etc.) |
+| `priority` | Yes | `critical` / `high` / `medium` |
+| `assigned_team` | Yes | Team that will work on the ticket |
+| `summary` | Yes | 2‑3 sentence AI‑written summary of the issue |
+| `suggested_action` | Yes | One‑line recommendation for the support agent |
 
 **Output**
 ```json
 {
-  "result": "c933e52a-5415-4320-9bbe-6edbf677ae4a"
+  "ticket_id": "c933e52a-5415-4320-9bbe-6edbf677ae4a"
 }
 ```
 
-Returns the UUID of the newly created ticket.
+**Side effects**  
+- Creates a ticket row with `status = 'pending_human'`, `resolution_type = 'escalated'`.  
+- The `summary` and `suggested_action` are stored directly in the tickets table.  
+- The agent‑service can later read these fields for the admin dashboard.
 
 ---
 
-### 8. `escalate_to_human`
+## Database changes (one‑time migration)
 
-Flag an existing ticket for immediate human attention.
-
-**Input**
-```json
-{
-  "ticket_id": "e5f6a7b8-c9d0-4e1f-2a3b-000000000001"
-}
+```sql
+ALTER TABLE tickets
+  ADD COLUMN IF NOT EXISTS summary TEXT,
+  ADD COLUMN IF NOT EXISTS suggested_action TEXT;
 ```
-
-**Output**
-```json
-{
-  "status": "escalated",
-  "ticket_id": "e5f6a7b8-c9d0-4e1f-2a3b-000000000001"
-}
-```
-
-Side effects: sets ticket `status` to `pending_human`, sets ticket `priority` to `critical`.
 
 ---
 
-### 9. `route_to_team`
+## What we removed (and why)
 
-Assign a ticket to a specific team queue. Supported teams: `order_fulfillment`, `payments`, `logistics`, `service_center`, `senior_support`, `general_support`.
+| Removed tool | Reason |
+|-------------|--------|
+| `issue_wallet_credit` | Operational task – handled by billing systems, not an AI agent. |
+| `schedule_return_pickup` | Operational task – handled by logistics systems. |
+| `check_refund_eligibility` | Policy check now done by agent‑service via RAG, not by direct DB query. |
+| `escalate_to_human` | Redundant – all tickets are already routed to the right team. |
+| `route_to_team` | Team assignment is set at ticket creation time. |
+| `get_order_details` | Not needed by the agent – recent orders already contain product info. The admin dashboard queries the database directly. |
 
-**Input**
-```json
-{
-  "ticket_id": "e5f6a7b8-c9d0-4e1f-2a3b-000000000001",
-  "team": "payments"
-}
-```
-
-**Output**
-```json
-{
-  "status": "routed",
-  "ticket_id": "e5f6a7b8-c9d0-4e1f-2a3b-000000000001",
-  "team": "payments"
-}
-```
-
-Side effect: updates `assigned_team` on the ticket row.
-
----
+The rebuilt MCP server will have **3 tools** instead of 9, making it simpler, faster, and easier to maintain.
