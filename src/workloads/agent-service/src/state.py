@@ -1,5 +1,5 @@
 # =============================================================================
-# state.py - Minimal agent state (classifier + context + router)
+# state.py - Minimal agent state
 # =============================================================================
 from __future__ import annotations
 
@@ -10,8 +10,6 @@ from langgraph.graph import MessagesState
 
 
 class AgentState(MessagesState):
-    """State that flows through guardrail -> context -> ticket router."""
-
     user_id: str | None
     user_email: str | None
     query_text: str
@@ -37,9 +35,8 @@ class Context:
 
 
 def route_after_guardrail(state: AgentState) -> str:
+    """Only unsafe content bypasses the LLM. Everything else gets enriched."""
     if state.get("guardrail_rejected", False):
         return "human_escalate"
-    classification = state.get("classification", {})
-    if not classification.get("auto_resolvable", True) or classification.get("urgency", 0) >= 10:
-        return "human_escalate"
+    # Everything goes through context gathering and the LLM ticket router
     return "context_gatherer"

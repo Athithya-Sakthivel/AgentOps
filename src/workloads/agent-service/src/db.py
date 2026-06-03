@@ -57,6 +57,9 @@ class Ticket(Base):
     resolution_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="open")
     priority: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    assigned_team: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    suggested_action: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )

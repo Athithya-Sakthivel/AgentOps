@@ -435,6 +435,17 @@ async def jwks():
     return JSONResponse(_get_public_jwks())
 
 
+@router.post("/auth/clear-session/{session_id}")
+async def clear_session(session_id: str, request: Request):
+    """Delete the LangGraph checkpoint so the next login starts fresh."""
+    try:
+        graph = request.app.state.graph
+        await graph.adelete_checkpoint({"configurable": {"thread_id": session_id}})
+        return {"status": "cleared"}
+    except Exception:
+        return {"status": "ok", "detail": "No checkpoint found or already cleared"}
+
+
 # ── Admin Page ──────────────────────────────────────────────────────
 @router.get("/admin", response_class=HTMLResponse)
 async def admin_page():
@@ -622,6 +633,7 @@ async def get_ticket_queue(limit: int = 50, offset: int = 0, _claims: dict = _ad
                     "resolution_type": t.resolution_type,
                     "status": t.status,
                     "priority": t.priority,
+                    "assigned_team": t.assigned_team or "general_support",
                     "created_at": t.created_at.isoformat() if t.created_at else None,
                 }
                 for t in tickets

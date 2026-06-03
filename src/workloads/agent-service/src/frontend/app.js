@@ -1,7 +1,11 @@
 // ---------- Auth Utilities ----------
 function logout() {
+  const sid = sessionStorage.getItem('chat_session_id');
+  if (sid) {
+    fetch('/auth/clear-session/' + sid, { method: 'POST' });
+  }
   localStorage.removeItem('app_jwt');
-  fetch('/auth/logout');
+  sessionStorage.clear();
   window.location.href = '/';
 }
 
@@ -85,6 +89,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   function initWidgetChat() {
     const token = localStorage.getItem('app_jwt');
     const sessionId = 'widget-' + Math.random().toString(36).substr(2, 9);
+    sessionStorage.setItem('chat_session_id', sessionId);
+
     const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(`${wsProtocol}//${location.host}/ws/chat/${sessionId}?token=${token}`);
     const messagesDiv = document.getElementById('widget-messages');
