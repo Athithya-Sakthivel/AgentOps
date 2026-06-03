@@ -1,5 +1,5 @@
 # =============================================================================
-# nodes.py - Autonomous Ticket Triage Agent
+# nodes.py – Conversational LLM agent with tools
 # =============================================================================
 from __future__ import annotations
 
@@ -46,7 +46,7 @@ def _safe_extract_data(raw_result: Any) -> Any:
     return raw_result
 
 
-# ── Team routing ────────────────────────────────────────────────────
+# ── Team routing (deterministic, used only for ticket creation) ──────
 INTENT_TO_TEAM: dict[str, str] = {
     "return_request": "order_fulfillment",
     "refund_status": "payments",
@@ -167,8 +167,8 @@ async def context_gatherer(state: AgentState, runtime: Runtime[Context]) -> dict
     }
 
 
-# ── Ticket creation helper ──────────────────────────────────────────
-async def _create_ticket(
+# ── Helper: create ticket and return confirmation (no ID in chat) ────
+async def _create_ticket_and_respond(
     state, mcp_client, run_id, summary, suggested_action, team, priority, sla, customer_name
 ):
     try:
@@ -187,8 +187,9 @@ async def _create_ticket(
         )
         ticket_id = _safe_extract_data(raw)
         ticket_id_str = str(ticket_id) if ticket_id else "unknown"
+        # Do not reveal the full UUID; just confirm
         return {
-            "final_response": f"{customer_name}, I've created a ticket for your issue. The {team.replace('_', ' ')} team will review it within {sla}. Your reference number is {ticket_id_str}.",
+            "final_response": f"{customer_name}, I've created a ticket for you. The {team.replace('_', ' ')} team will review it within {sla}.",
             "resolution_type": "auto_resolved",
             "ticket_id": ticket_id_str,
         }
@@ -200,86 +201,27 @@ async def _create_ticket(
         }
 
 
-# ── 3. Intent Router ────────────────────────────────────────────────
-async def intent_router(state: AgentState, runtime: Runtime[Context]) -> dict[str, Any]:
-    classification = state.get("classification", {})
-    intent = classification.get("intent", "general_inquiry")
-    urgency = classification.get("urgency", 0)
-    priority, sla = _get_priority_and_sla(urgency)
+# ── 3. Conversational Agent (LLM with tools) ─────────────────────────
+SYSTEM_PROMPT = """You are a helpful, empathetic customer support agent for Kestral, an Indian e-commerce company. You have access to the following tools:
 
-    query_lower = state["query_text"].lower()
-    policy_keywords = {
-        "policy",
-        "return policy",
-        "refund policy",
-        "how long",
-        "shipping",
-        "delivery time",
-        "warranty",
-        "exchange policy",
-    }
+- `get_recent_orders` : returns a list of the customer's recent orders with product names, delivery dates, return windows, and statuses. Use this to answer questions about orders.
+- `search_policies(query: str)` : search internal policy documents. Use this to answer policy questions.
+- `create_ticket(summary: str, suggested_action: str, priority: str, assigned_team: str)` : create a support ticket for the customer. You MUST ONLY call this after the customer has explicitly asked you to proceed (for example, after you have explained their return eligibility and they say "yes, create a ticket").
 
-    if intent == "general_inquiry" and any(kw in query_lower for kw in policy_keywords):
-        return await policy_qa(state, runtime)
+**Conversation rules:**
+- Always greet the customer by name.
+- If a customer has a problem but is vague (e.g., "I have a problem with my order"), ask them to describe the specific issue and which product it is about. Do not create a ticket until the issue is clear and the customer agrees.
+- If a customer asks about return eligibility, use `get_recent_orders` to retrieve their orders, then calculate whether the return window is still open. Tell the customer clearly: "Your <product> (order <short_id>) was delivered on <date>. The <N>-day return window <is still open / closed on <date>>. <If still open: Would you like me to create a return request for you? / If closed: Unfortunately it cannot be returned. I can escalate if you believe there are extenuating circumstances.>"
+- If a customer reports a concrete problem (damaged product, wrong item, late delivery), ask for any missing details, then offer to create a ticket. Wait for the customer to say "yes" before calling `create_ticket`.
+- When you create a ticket, you must include a `summary` (2-3 sentences describing the issue, including product and order ID) and a `suggested_action` (one sentence for the support team). The `priority` should be based on urgency (critical/high/medium) and `assigned_team` should be the appropriate team (e.g., logistics, service_center, order_fulfillment).
+- After creating a ticket, tell the customer which team will handle it and the expected response time. DO NOT display the ticket ID – just say "Your ticket has been created."
+- If a customer asks about policies, use `search_policies` and answer concisely.
 
-    return await ticket_writer(state, runtime)
+**Important:** Never guess order details. Use only the data returned by `get_recent_orders`.
 
-
-# ── 4. Policy Q&A ───────────────────────────────────────────────────
-async def policy_qa(state: AgentState, runtime: Runtime[Context]) -> dict[str, Any]:
-    resolver_lm = runtime.context.resolver_lm
-    run_id = state.get("run_id", "")
-    log_event("INFO", "Node started", node="policy_qa", run_id=run_id)
-
-    query = state["query_text"]
-    customer_name = "Hello"
-    ctx = state.get("customer_context") or {}
-    cust = ctx.get("customer")
-    if isinstance(cust, dict):
-        customer_name = cust.get("full_name", customer_name)
-
-    policy_chunks = []
-    try:
-        results = await asyncio.to_thread(search_policies, query=query, top_k=3)
-        policy_chunks = results[:2]
-    except Exception:
-        pass
-
-    policy_text = ""
-    for chunk in policy_chunks:
-        policy_text += f"**{chunk.get('chunk_title', '')}**\n{chunk.get('chunk_text', '')}\n\n"
-
-    system_prompt = "You are a helpful support agent. Answer the customer's policy question using ONLY the provided policy text. Be concise and friendly."
-    user_prompt = f"Customer: {customer_name}\nQuestion: {query}\n\nRelevant policies:\n{policy_text if policy_text else 'No specific policy found.'}"
-
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_prompt},
-    ]
-    try:
-        raw = await resolver_lm.acall(messages=messages)
-        raw_text = raw[0] if isinstance(raw, list) else raw
-        response = (
-            raw_text if isinstance(raw_text, str) else raw_text.get("response", str(raw_text))
-        )
-    except Exception:
-        response = "I'm sorry, I couldn't retrieve our policy documents at the moment."
-
-    return {"final_response": response, "resolution_type": "auto_resolved"}
-
-
-# ── 5. Ticket Writer ────────────────────────────────────────────────
-TICKET_WRITER_SYSTEM_PROMPT = """You are an expert support ticket writer. Given a customer's query and their recent orders, write a concise ticket summary (2-3 sentences) and a one-sentence suggested action for the support agent.
-
-The summary MUST include:
-- The customer's name
-- Specific order IDs and product names if mentioned or clearly implied
-- What the customer reported
-
-The suggested action should be a clear next step for the support team.
-
-Output as JSON:
-{"summary": "...", "suggested_action": "..."}
+Respond in JSON format:
+- To call a tool: {"action": "tool_call", "tool": "<name>", "args": {<params>}}
+- To reply to the customer: {"action": "final_answer", "response": "<your message>"}
 """
 
 
@@ -296,11 +238,11 @@ async def _call_llm_with_retry(lm, messages, max_retries=3):
                 raise
 
 
-async def ticket_writer(state: AgentState, runtime: Runtime[Context]) -> dict[str, Any]:
+async def conversational_agent(state: AgentState, runtime: Runtime[Context]) -> dict[str, Any]:
     resolver_lm = runtime.context.resolver_lm
     mcp_client = runtime.context.mcp_client
     run_id = state.get("run_id", "")
-    log_event("INFO", "Node started", node="ticket_writer", run_id=run_id)
+    log_event("INFO", "Node started", node="conversational_agent", run_id=run_id)
 
     query = state["query_text"]
     classification = state.get("classification", {})
@@ -317,38 +259,96 @@ async def ticket_writer(state: AgentState, runtime: Runtime[Context]) -> dict[st
     orders = customer_ctx.get("orders") or []
     orders = [o for o in orders if isinstance(o, dict)]
 
+    # Build a compact, data‑rich prompt
     order_lines = []
-    for o in orders[:3]:
+    for o in orders[:5]:
         pname = o.get("product_name", "Unknown")
-        delivery = (o.get("delivery_date") or "N/A")[:10]
-        order_lines.append(f"- {pname} (ID: {o['id'][:8]}, delivered: {delivery})")
+        delivery = (o.get("delivery_date") or "not delivered")[:10]
+        window = o.get("return_window_days", "N/A")
+        order_lines.append(
+            f"- {pname} (ID: {o['id'][:8]}) delivered {delivery}, {window}-day return window"
+        )
     orders_text = "\n".join(order_lines) if order_lines else "None"
 
-    user_prompt = f"Customer: {customer_name}\nQuery: {query}\nRecent orders:\n{orders_text}\nAssigned team: {team}, Priority: {priority}"
-
     messages = [
-        {"role": "system", "content": TICKET_WRITER_SYSTEM_PROMPT},
-        {"role": "user", "content": user_prompt},
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {
+            "role": "user",
+            "content": (
+                f"Customer: {customer_name}\n"
+                f"Query: {query}\n"
+                f"Recent orders:\n{orders_text}\n"
+                f"Assigned team: {team}   Priority: {priority}   SLA: {sla}"
+            ),
+        },
     ]
 
-    summary = query[:300]
-    suggested_action = "Review the issue and take appropriate action."
+    for step in range(5):
+        log_event("INFO", "Agent step", run_id=run_id, step=step)
+        try:
+            raw = await _call_llm_with_retry(resolver_lm, messages)
+            raw_text = raw[0] if isinstance(raw, list) else raw
+            result = json.loads(raw_text) if isinstance(raw_text, str) else raw_text
+        except (json.JSONDecodeError, KeyError):
+            messages.append(
+                {
+                    "role": "user",
+                    "content": "Please respond with valid JSON (action: tool_call or final_answer).",
+                }
+            )
+            continue
 
-    try:
-        raw = await _call_llm_with_retry(resolver_lm, messages)
-        raw_text = raw[0] if isinstance(raw, list) else raw
-        result = json.loads(raw_text) if isinstance(raw_text, str) else raw_text
-        summary = result.get("summary", summary)[:500]
-        suggested_action = result.get("suggested_action", suggested_action)
-    except Exception:
-        pass
+        action = result.get("action")
+        if action == "final_answer":
+            response = result.get("response", "I've noted your request.")
+            return {"final_response": response, "resolution_type": "auto_resolved"}
 
-    return await _create_ticket(
-        state, mcp_client, run_id, summary, suggested_action, team, priority, sla, customer_name
-    )
+        tool_name = result.get("tool")
+        tool_args = result.get("args", {})
+
+        if tool_name == "get_recent_orders":
+            # Already have orders in context, but the LLM may request a refresh
+            tool_output = orders
+        elif tool_name == "search_policies":
+            try:
+                policy_results = await asyncio.to_thread(
+                    search_policies, query=tool_args.get("query", query), top_k=3
+                )
+                tool_output = {"results": policy_results[:2]}
+            except Exception as exc:
+                tool_output = {"error": str(exc)}
+        elif tool_name == "create_ticket":
+            # The LLM has decided to create a ticket – execute it
+            summary = tool_args.get("summary", query[:300])
+            suggested_action = tool_args.get(
+                "suggested_action", "Review the issue and take appropriate action."
+            )
+            return await _create_ticket_and_respond(
+                state,
+                mcp_client,
+                run_id,
+                summary,
+                suggested_action,
+                team,
+                priority,
+                sla,
+                customer_name,
+            )
+        else:
+            tool_output = {"error": f"Unknown tool: {tool_name}"}
+
+        messages.append({"role": "assistant", "content": json.dumps(result)})
+        messages.append(
+            {"role": "user", "content": f"Tool result: {_safe_json_dumps(tool_output)[:300]}"}
+        )
+
+    return {
+        "final_response": "I'm sorry, I'm having trouble processing your request. A human agent will assist you shortly.",
+        "resolution_type": "escalated",
+    }
 
 
-# ── 6. Human Escalate ───────────────────────────────────────────────
+# ── 4. Human Escalate (unsafe content only) ─────────────────────────
 async def human_escalate(state: AgentState, runtime: Runtime[Context]) -> dict[str, Any]:
     mcp_client = runtime.context.mcp_client
     run_id = state.get("run_id", "")
@@ -365,7 +365,7 @@ async def human_escalate(state: AgentState, runtime: Runtime[Context]) -> dict[s
         customer = {}
     customer_name = customer.get("full_name", "Hello")
 
-    return await _create_ticket(
+    return await _create_ticket_and_respond(
         state,
         mcp_client,
         run_id,

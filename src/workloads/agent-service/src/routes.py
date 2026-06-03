@@ -17,7 +17,7 @@ from auth.dynamodb_rate_limiter import check_rate_limit
 from auth.jwt_utils import verify_access_token
 from authlib.integrations.starlette_client import OAuth, OAuthError
 from config import settings
-from db import AsyncSessionLocal, HumanOverride, Ticket, User
+from db import AsyncSessionLocal, HumanOverride, Order, Ticket, User
 from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from joserfc import jwt as joserfc_jwt
@@ -594,6 +594,22 @@ async def get_ticket_detail(ticket_id: str, _claims: dict = _admin_dep):
         )
         user_row = user_result.first()
 
+        # Fetch recent orders for this customer using the Order model
+        orders_result = await session.execute(
+            select(
+                Order.id,
+                Order.product_id,
+                Order.status,
+                Order.amount,
+                Order.delivery_date,
+                Order.tracking_number,
+            )
+            .where(Order.user_id == ticket.user_id)
+            .order_by(Order.order_date.desc())
+            .limit(5)
+        )
+        orders_rows = orders_result.all()
+
         return {
             "id": str(ticket.id),
             "user_id": str(ticket.user_id),
@@ -602,13 +618,27 @@ async def get_ticket_detail(ticket_id: str, _claims: dict = _admin_dep):
             "resolution_type": ticket.resolution_type,
             "status": ticket.status,
             "priority": ticket.priority,
-            "assigned_team": getattr(ticket, "assigned_team", None),
+            "assigned_team": ticket.assigned_team or "-",
+            "summary": ticket.summary or ticket.query_text[:200],
+            "suggested_action": ticket.suggested_action
+            or "Review the issue and take appropriate action.",
             "created_at": ticket.created_at.isoformat() if ticket.created_at else None,
             "customer": {
                 "full_name": user_row.full_name if user_row else "Unknown",
                 "email": user_row.email if user_row else None,
                 "phone": user_row.phone if user_row else None,
             },
+            "recent_orders": [
+                {
+                    "id": str(o.id),
+                    "product_id": str(o.product_id),
+                    "status": o.status,
+                    "amount": str(o.amount),
+                    "delivery_date": o.delivery_date.isoformat() if o.delivery_date else None,
+                    "tracking_number": o.tracking_number,
+                }
+                for o in orders_rows
+            ],
         }
 
 
