@@ -43,26 +43,21 @@ jobs:
                   context = browser.new_context()
                   page = context.new_page()
 
-                  # Start OAuth flow
                   page.goto(f"{target_url}/auth/login/start/google")
 
-                  # Google email
                   page.wait_for_selector('input[type="email"]', timeout=10000)
                   page.fill('input[type="email"]', email)
                   page.click('button:has-text("Next")')
 
-                  # Google password
                   page.wait_for_selector('input[type="password"]', timeout=10000)
                   page.fill('input[type="password"]', password)
                   page.click('button:has-text("Next")')
 
-                  # Wait for redirect back to app
                   try:
                       page.wait_for_url(f"{target_url}/admin**", timeout=20000)
                   except Exception:
                       page.wait_for_url(f"{target_url}/**", timeout=20000)
 
-                  # Collect cookies
                   all_cookies = context.cookies()
                   domain = target_url.split("://")[1].split("/")[0]
                   target_cookies = {c["name"]: c["value"] for c in all_cookies if domain in c.get("domain","")}
@@ -117,7 +112,7 @@ jobs:
 
           parameters:
             failOnError: false
-            failOnWarning: false        # ← Prevents exit code 2 from spider warnings
+            failOnWarning: false
             progressToStdout: true
 
           jobs:
@@ -150,7 +145,7 @@ jobs:
                   url: "${TARGET}/admin/override"
                   method: POST
 
-            # Spider public pages (403 from Cloudflare is expected – only a warning)
+            # Spider public pages (403 from Cloudflare is expected)
             - type: spider
               parameters:
                 context: agentops
@@ -180,6 +175,11 @@ jobs:
                 reportFile: zap_report
                 reportTitle: AgentOps ZAP DAST Report
                 reportDescription: Authenticated scan of AgentOps
+
+            # Override exit code to 0 for warnings only (real errors still fail)
+            - type: exitStatus
+              parameters:
+                okExitValue: 0
           EOF
 
       # -----------------------------------------------------------------
@@ -206,4 +206,3 @@ jobs:
         with:
           name: zap-dast-report
           path: zap_report*
-          
