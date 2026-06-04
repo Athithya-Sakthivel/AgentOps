@@ -1,12 +1,6 @@
 name: ZAP DAST Scan for AgentOps (Authenticated)
 
 on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-  schedule:
-    - cron: '0 6 * * 1'  # Every Monday at 06:00 UTC
   workflow_dispatch:
 
 env:
