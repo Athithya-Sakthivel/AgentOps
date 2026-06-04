@@ -22,7 +22,9 @@ jobs:
           TEST_ACCOUNT_EMAIL: ${{ secrets.TEST_ACCOUNT_EMAIL }}
           TEST_ACCOUNT_PASSWORD: ${{ secrets.TEST_ACCOUNT_PASSWORD }}
         run: |
-          TARGET="$TARGET_URL"
+          set -eu
+
+          TARGET="${TARGET_URL}"
 
           cat > zap_automation.yaml <<EOF
           env:
@@ -31,13 +33,13 @@ jobs:
                 urls:
                   - "${TARGET}"
                 includePaths:
-                  - "${TARGET}/.*"
+                  - '^https://athithya.site/.*'
                 excludePaths:
-                  - "${TARGET}/static/.*"
-                  - "${TARGET}/assets/.*"
-                  - "${TARGET}/.*\\.(js|css|png|jpg|jpeg|svg|ico|webp|woff2|ttf)$"
-                  - "${TARGET}/healthz"
-                  - "${TARGET}/readyz"
+                  - '^https://athithya.site/static/.*'
+                  - '^https://athithya.site/assets/.*'
+                  - '^https://athithya.site/.*\.(js|css|png|jpg|jpeg|svg|ico|webp|woff2|ttf)$'
+                  - '^https://athithya.site/healthz$'
+                  - '^https://athithya.site/readyz$'
                 authentication:
                   method: browser
                   parameters:
@@ -54,7 +56,7 @@ jobs:
                     pollUrl: "${TARGET}/auth/me"
                     pollPostData: ""
                 sessionManagement:
-                  method: cookie
+                  method: headers
                 users:
                   - name: agentops
                     credentials:
@@ -70,44 +72,68 @@ jobs:
               parameters:
                 context: agentops
                 user: agentops
+                url: "${TARGET}"
+                maxDuration: 5
+                logoutAvoidance: true
+
+            - type: passiveScan-wait
 
             - type: requestor
               parameters:
                 user: agentops
               requests:
-                - url: "${TARGET}/"
+                - name: Home page
+                  url: "${TARGET}/"
                   method: GET
-                - url: "${TARGET}/chat.html"
+                - name: Chat page
+                  url: "${TARGET}/chat.html"
                   method: GET
-                - url: "${TARGET}/auth/login"
+                - name: Login page
+                  url: "${TARGET}/auth/login"
                   method: GET
-                - url: "${TARGET}/auth/login/start/google"
+                - name: OAuth login start
+                  url: "${TARGET}/auth/login/start/google"
                   method: GET
-                - url: "${TARGET}/auth/logout"
+                - name: Logout
+                  url: "${TARGET}/auth/logout"
                   method: GET
-                - url: "${TARGET}/auth/me"
+                - name: Me
+                  url: "${TARGET}/auth/me"
                   method: GET
-                - url: "${TARGET}/.well-known/jwks.json"
+                - name: JWKS
+                  url: "${TARGET}/.well-known/jwks.json"
                   method: GET
-                - url: "${TARGET}/admin"
+                - name: Admin dashboard
+                  url: "${TARGET}/admin"
                   method: GET
-                - url: "${TARGET}/admin/queue"
+                - name: Admin queue
+                  url: "${TARGET}/admin/queue"
                   method: GET
-                - url: "${TARGET}/admin/analytics"
+                - name: Admin analytics
+                  url: "${TARGET}/admin/analytics"
                   method: GET
-                - url: "${TARGET}/admin/override"
+                - name: Admin override
+                  url: "${TARGET}/admin/override"
                   method: POST
                   data: ""
-
-            - type: passiveScan-wait
 
             - type: activeScan
               parameters:
                 context: agentops
                 user: agentops
+                url: "${TARGET}"
                 maxRuleDurationInMins: 5
-                attackStrength: "${ZAP_ATTACK_STRENGTH}"
-                alertThreshold: "${ZAP_ALERT_THRESHOLD}"
+                defaultStrength: "${ZAP_ATTACK_STRENGTH}"
+                defaultThreshold: "${ZAP_ALERT_THRESHOLD}"
+
+            - type: activeScan
+              parameters:
+                context: agentops
+                user: agentops
+                url: "${TARGET}/admin"
+                maxRuleDurationInMins: 5
+                defaultStrength: "${ZAP_ATTACK_STRENGTH}"
+                defaultThreshold: "${ZAP_ALERT_THRESHOLD}"
 
             - type: report
               parameters:
@@ -130,8 +156,6 @@ jobs:
             -e TEST_ACCOUNT_EMAIL="${{ secrets.TEST_ACCOUNT_EMAIL }}" \
             -e TEST_ACCOUNT_PASSWORD="${{ secrets.TEST_ACCOUNT_PASSWORD }}" \
             -e TARGET_URL="${{ env.TARGET_URL }}" \
-            -e ZAP_ATTACK_STRENGTH="${{ env.ZAP_ATTACK_STRENGTH }}" \
-            -e ZAP_ALERT_THRESHOLD="${{ env.ZAP_ALERT_THRESHOLD }}" \
             zaproxy/zap-stable:2.17.0 \
             zap.sh -cmd -autorun /zap/wrk/zap_automation.yaml
 
