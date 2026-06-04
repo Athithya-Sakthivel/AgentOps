@@ -51,9 +51,10 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; back
 
 /* Floating Support Widget */
 .support-widget { position: fixed; bottom: 24px; right: 24px; z-index: 1000; }
-.support-toggle { width: 56px; height: 56px; border-radius: 50%; background: #0d6efd; color: #fff; border: none; font-size: 1.5rem; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+.support-toggle { width: 56px; height: 56px; border-radius: 50%; background: #0d6efd; color: #fff; border: none; font-size: 1.5rem; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.15); transition: transform 0.2s; }
+.support-toggle:hover { transform: scale(1.05); }
 .support-panel { position: absolute; bottom: 70px; right: 0; width: 360px; height: 480px; background: #fff; border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,0.12); display: flex; flex-direction: column; overflow: hidden; }
-.panel-header { padding: 16px; background: #0d6efd; color: #fff; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+.panel-header { padding: 16px; background: #0f172a; color: #fff; font-weight: 600; display: flex; justify-content: space-between; align-items: center; border-radius: 12px 12px 0 0; }
 .panel-close { background: none; border: none; color: #fff; font-size: 1.2rem; cursor: pointer; }
 .panel-content { flex: 1; padding: 0; overflow-y: auto; display: flex; flex-direction: column; }
 
@@ -68,6 +69,7 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; back
 .chat-messages { flex: 1; padding: 12px; overflow-y: auto; }
 .chat-input { display: flex; gap: 8px; padding: 12px; border-top: 1px solid #e9ecef; flex-shrink: 0; }
 .chat-input input { flex: 1; padding: 8px 12px; border: 1px solid #ced4da; border-radius: 8px; outline: none; }
+.chat-input input:focus { border-color: #0d6efd; box-shadow: 0 0 0 3px rgba(13,110,253,0.1); }
 .chat-input button { padding: 8px 16px; background: #0d6efd; color: #fff; border: none; border-radius: 8px; cursor: pointer; }
 
 /* Auth buttons inside widget */
@@ -75,10 +77,10 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; back
 .btn-google, .btn-microsoft { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; border: 1px solid #ced4da; border-radius: 8px; background: #fff; font-weight: 500; cursor: pointer; text-decoration: none; color: #212529; }
 .btn-google:hover, .btn-microsoft:hover { background: #f8f9fa; }
 
-/* Chat bubbles */
-.bubble { display: flex; gap: 8px; margin-bottom: 12px; }
-.bubble.user { flex-direction: row-reverse; }
-.bubble-avatar { font-size: 1.2rem; }
-.bubble-text { padding: 10px 14px; border-radius: 12px; font-size: 0.9rem; line-height: 1.4; max-width: 85%; }
-.bubble.agent .bubble-text { background: #e9ecef; }
+/* Chat bubbles (widget and full-page) */
+.bubble { display: flex; gap: 10px; margin-bottom: 16px; max-width: 75%; }
+.bubble.user { margin-left: auto; flex-direction: row-reverse; }
+.bubble-avatar { width: 32px; height: 32px; border-radius: 50%; background: #e2e8f0; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+.bubble-text { padding: 12px 16px; border-radius: 16px; font-size: 14px; line-height: 1.5; }
+.bubble.agent .bubble-text { background: #f1f5f9; color: #334155; }
 .bubble.user .bubble-text { background: #0d6efd; color: #fff; }

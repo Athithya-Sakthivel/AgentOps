@@ -17,6 +17,8 @@ lsof -ti :8001 | xargs kill -9 2>/dev/null || true
 sleep 2
 lsof -ti :8000 && echo "Port 8000 STILL IN USE" && exit 1 || echo "Port 8000 free"
 
+PGPASSWORD=localdev psql -h localhost -p 5432 -U agentops -d kestral -c "DELETE FROM tickets WHERE created_at > NOW() - INTERVAL '1 day';"
+
 # ── Start MCP Server (no AWS secrets needed) ──────────────────────
 echo "[1/3] Starting mcp-server..."
 cd /workspace/src/workloads/mcp-server

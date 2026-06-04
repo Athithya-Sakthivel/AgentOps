@@ -1,6 +1,3 @@
-# =============================================================================
-# routes.py — Final (all fixes, admin auto‑redirect, ticket detail)
-# =============================================================================
 from __future__ import annotations
 
 import base64
@@ -17,7 +14,7 @@ from auth.dynamodb_rate_limiter import check_rate_limit
 from auth.jwt_utils import verify_access_token
 from authlib.integrations.starlette_client import OAuth, OAuthError
 from config import settings
-from db import AsyncSessionLocal, HumanOverride, Order, Ticket, User
+from db import AsyncSessionLocal, HumanOverride, Order, Product, Ticket, User
 from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from joserfc import jwt as joserfc_jwt
@@ -594,16 +591,18 @@ async def get_ticket_detail(ticket_id: str, _claims: dict = _admin_dep):
         )
         user_row = user_result.first()
 
-        # Fetch recent orders for this customer using the Order model
+        # Fetch recent orders with product names
         orders_result = await session.execute(
             select(
                 Order.id,
                 Order.product_id,
+                Product.name.label("product_name"),
                 Order.status,
                 Order.amount,
                 Order.delivery_date,
                 Order.tracking_number,
             )
+            .join(Product, Order.product_id == Product.id)
             .where(Order.user_id == ticket.user_id)
             .order_by(Order.order_date.desc())
             .limit(5)
@@ -632,6 +631,7 @@ async def get_ticket_detail(ticket_id: str, _claims: dict = _admin_dep):
                 {
                     "id": str(o.id),
                     "product_id": str(o.product_id),
+                    "product_name": o.product_name,
                     "status": o.status,
                     "amount": str(o.amount),
                     "delivery_date": o.delivery_date.isoformat() if o.delivery_date else None,

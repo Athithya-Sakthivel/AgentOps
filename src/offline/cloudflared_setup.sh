@@ -2,14 +2,6 @@
 # =============================================================================
 # AgentOps — Local Cloudflared Tunnel Setup (Idempotent, No Login)
 # =============================================================================
-# Uses tunnel token + credentials file directly. No browser login required.
-#
-# Usage:
-#   bash src/offline/cloudflared_setup.sh
-#
-# Stop:
-#   pkill -f "cloudflared tunnel run"
-# =============================================================================
 set -euo pipefail
 
 DOMAIN="${DOMAIN:-athithya.site}"
@@ -33,7 +25,7 @@ if ! curl -sf --max-time 2 "http://localhost:${AGENT_PORT}/healthz" >/dev/null 2
 fi
 echo "[INFO] Agent service is reachable."
 
-# ── 2. Fetch tunnel credentials from OpenTofu outputs ──────────────
+# ── 2. Fetch tunnel credentials ─────────────────────────────────────
 TUNNEL_ID="$(tofu -chdir=src/infra/cloudflare output -raw cloudflare_tunnel_id 2>/dev/null || echo '')"
 TUNNEL_TOKEN="$(tofu -chdir=src/infra/cloudflare output -raw cloudflare_tunnel_token 2>/dev/null || echo '')"
 
@@ -45,14 +37,11 @@ fi
 
 echo "[INFO] Tunnel ID: ${TUNNEL_ID}"
 
-# ── 3. Ensure credentials file exists (idempotent) ─────────────────
+# ── 3. Ensure credentials file exists ───────────────────────────────
 CRED_FILE="${CONFIG_DIR}/${TUNNEL_ID}.json"
 if [[ ! -f "${CRED_FILE}" ]]; then
   echo "[INFO] Credentials file missing. Creating from Cloudflare API..."
-  
   : "${CLOUDFLARE_ACCOUNT_ID:?export CLOUDFLARE_ACCOUNT_ID first}"
-
-  # Fetch tunnel token JSON and write to credentials file
   curl -sf -X GET \
     "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/cfd_tunnel/${TUNNEL_ID}/token" \
     -H "Authorization: Bearer ${CLOUDFLARE_GLOBAL_API_KEY}" \
@@ -66,7 +55,7 @@ else
   echo "[INFO] Credentials file already exists: ${CRED_FILE}"
 fi
 
-# ── 4. Write cloudflared config (idempotent — overwrites) ──────────
+# ── 4. Write cloudflared config ─────────────────────────────────────
 mkdir -p "${CONFIG_DIR}"
 
 cat > "${CONFIG_FILE}" << YAML
@@ -95,7 +84,7 @@ ingress:
     originRequest:
       connectTimeout: "10s"
       keepAliveTimeout: "120s"
-      
+
   # Admin dashboard + API
   - hostname: ${DOMAIN}
     path: /admin/*
@@ -106,20 +95,16 @@ ingress:
     path: /.well-known/*
     service: http://localhost:${AGENT_PORT}
 
-  # Frontend (root)
+  # ── All other requests (static files, frontend) ─────────────────
   - hostname: ${DOMAIN}
-    path: /
+    path: /*
     service: http://localhost:${AGENT_PORT}
-    originRequest:
-      connectTimeout: "10s"
 
-  # Catch-all: reject everything else
-  - service: http_status:404
 YAML
 
 echo "[INFO] Config written to ${CONFIG_FILE}"
 
-# ── 5. Start cloudflared with the existing tunnel ──────────────────
+# ── 5. Start cloudflared ────────────────────────────────────────────
 export TUNNEL_TOKEN
 
 echo "[INFO] Starting cloudflared → https://${DOMAIN} → localhost:${AGENT_PORT}"
@@ -133,13 +118,11 @@ CLOUDFLARED_PID=$!
 
 sleep 4
 
-# Check both PID file and actual process
 if kill -0 "${CLOUDFLARED_PID}" 2>/dev/null; then
   echo "[INFO] Tunnel is running (PID ${CLOUDFLARED_PID})"
 elif pgrep -f "cloudflared.*tunnel.*run" >/dev/null 2>&1; then
   echo "[INFO] Tunnel is running (found via pgrep)"
 else
-  # Check if logs show successful registration
   if grep -q "Registered tunnel connection" /tmp/cloudflared.log 2>/dev/null; then
     echo "[INFO] Tunnel appears to be running (connections registered in log)"
   else

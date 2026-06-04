@@ -1,5 +1,5 @@
 # =============================================================================
-# state.py - Minimal agent state
+# state.py – Only guardrail rejection escalates; everything else → conversational
 # =============================================================================
 from __future__ import annotations
 
@@ -26,6 +26,9 @@ class AgentState(MessagesState):
     final_response: str | None
     error: str | None
 
+    # Store the last assistant response for deterministic confirmations
+    last_assistant_message: str | None
+
 
 @dataclass
 class Context:
@@ -35,8 +38,7 @@ class Context:
 
 
 def route_after_guardrail(state: AgentState) -> str:
-    """Only unsafe content bypasses the LLM. Everything else gets enriched."""
+    """Only truly unsafe content bypasses the conversational agent."""
     if state.get("guardrail_rejected", False):
         return "human_escalate"
-    # Everything goes through context gathering and the LLM ticket router
     return "context_gatherer"

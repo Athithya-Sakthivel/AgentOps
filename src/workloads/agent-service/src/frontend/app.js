@@ -35,7 +35,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const panelContent = document.getElementById('panel-content');
   const closeBtn = document.getElementById('panel-close');
 
-  if (!toggle) return; // not on homepage
+  if (!toggle) return;
 
   toggle.addEventListener('click', async () => {
     panel.classList.toggle('hidden');
