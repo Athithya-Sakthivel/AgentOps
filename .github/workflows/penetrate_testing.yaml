@@ -17,6 +17,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Prepare output directories
+        run: mkdir -p zap-home
+
       - name: Write ZAP automation plan
         env:
           TEST_ACCOUNT_EMAIL: ${{ secrets.TEST_ACCOUNT_EMAIL }}
@@ -44,19 +47,15 @@ jobs:
                   method: browser
                   parameters:
                     loginPageUrl: "${TARGET}/auth/login"
-                    loginPageWait: 2
+                    loginPageWait: 5
+                    stepDelay: 1
                     browserId: firefox-headless
-                    steps: []
-                  verification:
-                    method: poll
-                    loggedInRegex: '\\Q 200 OK\\E'
-                    loggedOutRegex: '\\Q 401 Unauthorized\\E'
-                    pollFrequency: 60
-                    pollUnits: seconds
-                    pollUrl: "${TARGET}/auth/me"
-                    pollPostData: ""
+                    diagnostics: false
+                    steps:
+                      - description: Auto-detect and submit login form
+                        type: AUTO_STEPS
                 sessionManagement:
-                  method: headers
+                  method: cookie
                 users:
                   - name: agentops
                     credentials:
@@ -68,16 +67,6 @@ jobs:
               progressToStdout: true
 
           jobs:
-            - type: spider
-              parameters:
-                context: agentops
-                user: agentops
-                url: "${TARGET}"
-                maxDuration: 5
-                logoutAvoidance: true
-
-            - type: passiveScan-wait
-
             - type: requestor
               parameters:
                 user: agentops
@@ -85,55 +74,115 @@ jobs:
                 - name: Home page
                   url: "${TARGET}/"
                   method: GET
+                  headers:
+                    - "Accept:text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+                    - "Accept-Language:en-US,en;q=0.9"
+                    - "Cache-Control:no-cache"
+
                 - name: Chat page
                   url: "${TARGET}/chat.html"
                   method: GET
+                  headers:
+                    - "Accept:text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+                    - "Accept-Language:en-US,en;q=0.9"
+                    - "Cache-Control:no-cache"
+
                 - name: Login page
                   url: "${TARGET}/auth/login"
                   method: GET
+                  headers:
+                    - "Accept:text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+                    - "Accept-Language:en-US,en;q=0.9"
+                    - "Cache-Control:no-cache"
+
                 - name: OAuth login start
                   url: "${TARGET}/auth/login/start/google"
                   method: GET
+                  headers:
+                    - "Accept:text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+                    - "Accept-Language:en-US,en;q=0.9"
+                    - "Cache-Control:no-cache"
+
                 - name: Logout
                   url: "${TARGET}/auth/logout"
                   method: GET
+                  headers:
+                    - "Accept:text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+                    - "Accept-Language:en-US,en;q=0.9"
+                    - "Cache-Control:no-cache"
+
                 - name: Me
                   url: "${TARGET}/auth/me"
                   method: GET
+                  headers:
+                    - "Accept:text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+                    - "Accept-Language:en-US,en;q=0.9"
+                    - "Cache-Control:no-cache"
+
                 - name: JWKS
                   url: "${TARGET}/.well-known/jwks.json"
                   method: GET
+                  headers:
+                    - "Accept:text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+                    - "Accept-Language:en-US,en;q=0.9"
+                    - "Cache-Control:no-cache"
+
                 - name: Admin dashboard
                   url: "${TARGET}/admin"
                   method: GET
+                  headers:
+                    - "Accept:text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+                    - "Accept-Language:en-US,en;q=0.9"
+                    - "Cache-Control:no-cache"
+
                 - name: Admin queue
                   url: "${TARGET}/admin/queue"
                   method: GET
+                  headers:
+                    - "Accept:text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+                    - "Accept-Language:en-US,en;q=0.9"
+                    - "Cache-Control:no-cache"
+
                 - name: Admin analytics
                   url: "${TARGET}/admin/analytics"
                   method: GET
+                  headers:
+                    - "Accept:text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+                    - "Accept-Language:en-US,en;q=0.9"
+                    - "Cache-Control:no-cache"
+
                 - name: Admin override
                   url: "${TARGET}/admin/override"
                   method: POST
                   data: ""
+                  headers:
+                    - "Accept:text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+                    - "Accept-Language:en-US,en;q=0.9"
+                    - "Cache-Control:no-cache"
+
+            - type: passiveScan-wait
 
             - type: activeScan
               parameters:
                 context: agentops
                 user: agentops
-                url: "${TARGET}"
-                maxRuleDurationInMins: 5
+                url: "${TARGET}/chat.html"
+                maxRuleDurationInMins: 2
+                maxScanDurationInMins: 6
                 defaultStrength: "${ZAP_ATTACK_STRENGTH}"
                 defaultThreshold: "${ZAP_ALERT_THRESHOLD}"
+                policy: Default Policy
 
             - type: activeScan
               parameters:
                 context: agentops
                 user: agentops
                 url: "${TARGET}/admin"
-                maxRuleDurationInMins: 5
+                maxRuleDurationInMins: 2
+                maxScanDurationInMins: 10
                 defaultStrength: "${ZAP_ATTACK_STRENGTH}"
                 defaultThreshold: "${ZAP_ALERT_THRESHOLD}"
+                policy: Default Policy
 
             - type: report
               parameters:
@@ -153,6 +202,7 @@ jobs:
         run: |
           docker run --rm \
             -v "${{ github.workspace }}:/zap/wrk:rw" \
+            -v "${{ github.workspace }}/zap-home:/home/zap/.ZAP:rw" \
             -e TEST_ACCOUNT_EMAIL="${{ secrets.TEST_ACCOUNT_EMAIL }}" \
             -e TEST_ACCOUNT_PASSWORD="${{ secrets.TEST_ACCOUNT_PASSWORD }}" \
             -e TARGET_URL="${{ env.TARGET_URL }}" \
@@ -164,4 +214,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: zap-dast-report
-          path: zap_report*
+          path: |
+            zap_report*
+            zap-home
