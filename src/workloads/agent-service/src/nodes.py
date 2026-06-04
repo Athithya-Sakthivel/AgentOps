@@ -1,5 +1,5 @@
 # =============================================================================
-# nodes.py – Final demo agent (clean summaries, robust confirmations)
+# nodes.py – Final agent (clean summaries, robust confirmations)
 # =============================================================================
 from __future__ import annotations
 

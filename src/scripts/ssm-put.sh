@@ -145,7 +145,7 @@ put_string "${PREFIX}/domain" "$DOMAIN"
 # -------------------------------------------------------------------
 # 8. Admin Access Control – explicit for each type
 # -------------------------------------------------------------------
-# We want only sairamtap.edu.in to have admin access.
+# We want only custom domain (eg., sairamtap.edu.in) to have admin access.
 put_string "${PREFIX}/admin-allowed-google-domains" "sairamtap.edu.in"
 put_string "${PREFIX}/admin-allowed-microsoft-tenants" "$MICROSOFT_TENANT_ID"
 

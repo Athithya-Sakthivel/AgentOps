@@ -130,8 +130,8 @@
       let html = filterHtml + '<div class="ticket-grid">';
       data.tickets.forEach(t => {
         const createdIST = new Date(t.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
-        const shortQuery = (t.query_text || '').length <= 10;
-        const displayText = shortQuery ? (t.summary || t.query_text) : (t.query_text || '');
+        const isShortQuery = (t.query_text || '').length <= 15;
+        const displayText = isShortQuery ? (t.summary || t.query_text) : (t.summary || t.query_text);
         const displaySummary = (displayText || '').length > 80 ? displayText.substring(0, 80) + '…' : displayText;
         html += `
           <div class="ticket-card" data-team="${t.assigned_team || 'general_support'}" onclick="openTicket('${t.id}')">
