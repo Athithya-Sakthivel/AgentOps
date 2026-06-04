@@ -16,6 +16,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        
+      - name: Prepare report directory
+        run: |
+          mkdir -p reports
+          chmod 777 reports
 
       - name: Write ZAP automation plan
         env:
@@ -210,6 +215,7 @@ jobs:
       - name: Run ZAP authenticated scan
         run: |
           docker run --rm \
+            --user root \
             -v "${{ github.workspace }}:/zap/wrk:rw" \
             -e TEST_ACCOUNT_EMAIL="${{ secrets.TEST_ACCOUNT_EMAIL }}" \
             -e TEST_ACCOUNT_PASSWORD="${{ secrets.TEST_ACCOUNT_PASSWORD }}" \
