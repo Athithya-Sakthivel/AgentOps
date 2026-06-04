@@ -17,9 +17,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Prepare output directories
-        run: mkdir -p zap-home
-
       - name: Write ZAP automation plan
         env:
           TEST_ACCOUNT_EMAIL: ${{ secrets.TEST_ACCOUNT_EMAIL }}
@@ -75,90 +72,90 @@ jobs:
                   url: "${TARGET}/"
                   method: GET
                   headers:
-                    - "Accept:text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-                    - "Accept-Language:en-US,en;q=0.9"
-                    - "Cache-Control:no-cache"
+                    - 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+                    - 'Accept-Language: en-US,en;q=0.9'
+                    - 'Cache-Control: no-cache'
 
                 - name: Chat page
                   url: "${TARGET}/chat.html"
                   method: GET
                   headers:
-                    - "Accept:text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-                    - "Accept-Language:en-US,en;q=0.9"
-                    - "Cache-Control:no-cache"
+                    - 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+                    - 'Accept-Language: en-US,en;q=0.9'
+                    - 'Cache-Control: no-cache'
 
                 - name: Login page
                   url: "${TARGET}/auth/login"
                   method: GET
                   headers:
-                    - "Accept:text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-                    - "Accept-Language:en-US,en;q=0.9"
-                    - "Cache-Control:no-cache"
+                    - 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+                    - 'Accept-Language: en-US,en;q=0.9'
+                    - 'Cache-Control: no-cache'
 
                 - name: OAuth login start
                   url: "${TARGET}/auth/login/start/google"
                   method: GET
                   headers:
-                    - "Accept:text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-                    - "Accept-Language:en-US,en;q=0.9"
-                    - "Cache-Control:no-cache"
+                    - 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+                    - 'Accept-Language: en-US,en;q=0.9'
+                    - 'Cache-Control: no-cache'
 
                 - name: Logout
                   url: "${TARGET}/auth/logout"
                   method: GET
                   headers:
-                    - "Accept:text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-                    - "Accept-Language:en-US,en;q=0.9"
-                    - "Cache-Control:no-cache"
+                    - 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+                    - 'Accept-Language: en-US,en;q=0.9'
+                    - 'Cache-Control: no-cache'
 
                 - name: Me
                   url: "${TARGET}/auth/me"
                   method: GET
                   headers:
-                    - "Accept:text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-                    - "Accept-Language:en-US,en;q=0.9"
-                    - "Cache-Control:no-cache"
+                    - 'Accept: application/json, text/plain, */*'
+                    - 'Accept-Language: en-US,en;q=0.9'
+                    - 'Cache-Control: no-cache'
 
                 - name: JWKS
                   url: "${TARGET}/.well-known/jwks.json"
                   method: GET
                   headers:
-                    - "Accept:text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-                    - "Accept-Language:en-US,en;q=0.9"
-                    - "Cache-Control:no-cache"
+                    - 'Accept: application/json, text/plain, */*'
+                    - 'Accept-Language: en-US,en;q=0.9'
+                    - 'Cache-Control: no-cache'
 
                 - name: Admin dashboard
                   url: "${TARGET}/admin"
                   method: GET
                   headers:
-                    - "Accept:text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-                    - "Accept-Language:en-US,en;q=0.9"
-                    - "Cache-Control:no-cache"
+                    - 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+                    - 'Accept-Language: en-US,en;q=0.9'
+                    - 'Cache-Control: no-cache'
 
                 - name: Admin queue
                   url: "${TARGET}/admin/queue"
                   method: GET
                   headers:
-                    - "Accept:text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-                    - "Accept-Language:en-US,en;q=0.9"
-                    - "Cache-Control:no-cache"
+                    - 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+                    - 'Accept-Language: en-US,en;q=0.9'
+                    - 'Cache-Control: no-cache'
 
                 - name: Admin analytics
                   url: "${TARGET}/admin/analytics"
                   method: GET
                   headers:
-                    - "Accept:text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-                    - "Accept-Language:en-US,en;q=0.9"
-                    - "Cache-Control:no-cache"
+                    - 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+                    - 'Accept-Language: en-US,en;q=0.9'
+                    - 'Cache-Control: no-cache'
 
                 - name: Admin override
                   url: "${TARGET}/admin/override"
                   method: POST
-                  data: ""
+                  data: ''
                   headers:
-                    - "Accept:text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-                    - "Accept-Language:en-US,en;q=0.9"
-                    - "Cache-Control:no-cache"
+                    - 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+                    - 'Accept-Language: en-US,en;q=0.9'
+                    - 'Cache-Control: no-cache'
 
             - type: passiveScan-wait
 
@@ -167,22 +164,34 @@ jobs:
                 context: agentops
                 user: agentops
                 url: "${TARGET}/chat.html"
-                maxRuleDurationInMins: 2
-                maxScanDurationInMins: 6
+                policy: Default Policy
                 defaultStrength: "${ZAP_ATTACK_STRENGTH}"
                 defaultThreshold: "${ZAP_ALERT_THRESHOLD}"
-                policy: Default Policy
+                maxRuleDurationInMins: 2
+                maxScanDurationInMins: 6
+                delayInMs: 500
+                threadPerHost: 1
+                handleAntiCSRFTokens: true
+                addQueryParam: false
+                scanHeadersAllRequests: false
+                maxAlertsPerRule: 5
 
             - type: activeScan
               parameters:
                 context: agentops
                 user: agentops
                 url: "${TARGET}/admin"
-                maxRuleDurationInMins: 2
-                maxScanDurationInMins: 10
+                policy: Default Policy
                 defaultStrength: "${ZAP_ATTACK_STRENGTH}"
                 defaultThreshold: "${ZAP_ALERT_THRESHOLD}"
-                policy: Default Policy
+                maxRuleDurationInMins: 2
+                maxScanDurationInMins: 10
+                delayInMs: 500
+                threadPerHost: 1
+                handleAntiCSRFTokens: true
+                addQueryParam: false
+                scanHeadersAllRequests: false
+                maxAlertsPerRule: 5
 
             - type: report
               parameters:
@@ -202,7 +211,6 @@ jobs:
         run: |
           docker run --rm \
             -v "${{ github.workspace }}:/zap/wrk:rw" \
-            -v "${{ github.workspace }}/zap-home:/home/zap/.ZAP:rw" \
             -e TEST_ACCOUNT_EMAIL="${{ secrets.TEST_ACCOUNT_EMAIL }}" \
             -e TEST_ACCOUNT_PASSWORD="${{ secrets.TEST_ACCOUNT_PASSWORD }}" \
             -e TARGET_URL="${{ env.TARGET_URL }}" \
@@ -214,6 +222,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: zap-dast-report
-          path: |
-            zap_report*
-            zap-home
+          path: zap_report*
