@@ -1,6 +1,12 @@
 name: ZAP DAST Scan for AgentOps (Authenticated)
 
 on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '0 6 * * 1'  # Every Monday at 06:00 UTC
   workflow_dispatch:
 
 env:
@@ -71,7 +77,7 @@ jobs:
           chmod +x /tmp/agentops_login.py
 
       # -----------------------------------------------------------------
-      # Write ZAP automation plan (browser auth + cookie session)
+      # Write ZAP automation plan (browser auth + cookie session, no spider)
       # -----------------------------------------------------------------
       - name: Write ZAP automation plan
         run: |
@@ -116,7 +122,7 @@ jobs:
             progressToStdout: true
 
           jobs:
-            # Seed ZAP's site tree
+            # Seed ZAP's site tree with all known endpoints
             - type: requestor
               parameters:
                 user: agentops
@@ -145,14 +151,7 @@ jobs:
                   url: "${TARGET}/admin/override"
                   method: POST
 
-            # Spider public pages (403 from Cloudflare is expected)
-            - type: spider
-              parameters:
-                context: agentops
-                user: agentops
-                maxChildren: 15
-
-            # Active scan all in-scope pages
+            # Active scan all endpoints added by the requestor
             - type: activeScan
               parameters:
                 context: agentops
@@ -175,11 +174,6 @@ jobs:
                 reportFile: zap_report
                 reportTitle: AgentOps ZAP DAST Report
                 reportDescription: Authenticated scan of AgentOps
-
-            # Override exit code to 0 for warnings only (real errors still fail)
-            - type: exitStatus
-              parameters:
-                okExitValue: 0
           EOF
 
       # -----------------------------------------------------------------
