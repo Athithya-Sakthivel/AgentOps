@@ -116,7 +116,7 @@ bash src/offline/index-policies/commands.sh
 </details>
 
 
-### Phase 3: 
+### Phase 3: Trigger 
 
 ```sh
 gh secret set AWS_ACCOUNT_ID --body $(aws sts get-caller-identity --query Account --output text)
