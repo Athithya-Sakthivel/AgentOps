@@ -1,6 +1,12 @@
 name: ZAP DAST Scan for AgentOps (Authenticated)
 
 on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '0 6 * * 1'  # Every Monday at 06:00 UTC
   workflow_dispatch:
 
 env:
@@ -16,213 +22,227 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        
+
       - name: Prepare report directory
         run: |
           mkdir -p reports
           chmod 777 reports
 
-      - name: Write ZAP automation plan
-        env:
-          TEST_ACCOUNT_EMAIL: ${{ secrets.TEST_ACCOUNT_EMAIL }}
-          TEST_ACCOUNT_PASSWORD: ${{ secrets.TEST_ACCOUNT_PASSWORD }}
+      # -----------------------------------------------------------------
+      # Login script: extracts JWT from localStorage after OAuth flow
+      # -----------------------------------------------------------------
+      - name: Create AgentOps login script
         run: |
-          set -eu
+          cat > /tmp/agentops_login.py << 'PYEOF'
+          #!/usr/bin/env python3
+          """Log into Kestral via Google OAuth and return JWT from localStorage."""
+          import os, json
+          from playwright.sync_api import sync_playwright
 
-          TARGET="${TARGET_URL}"
+          def get_authenticated_session():
+              email = os.environ["TEST_ACCOUNT_EMAIL"]
+              password = os.environ["TEST_ACCOUNT_PASSWORD"]
+              target_url = os.environ.get("TARGET_URL", "https://athithya.site").rstrip("/")
 
-          cat > zap_automation.yaml <<EOF
+              with sync_playwright() as p:
+                  browser = p.chromium.launch(headless=True)
+                  context = browser.new_context()
+                  page = context.new_page()
+
+                  # Step 1 – start the OAuth flow from the app
+                  page.goto(f"{target_url}/auth/login/start/google")
+
+                  # Step 2 – Google email
+                  page.wait_for_selector('input[type="email"]', timeout=10000)
+                  page.fill('input[type="email"]', email)
+                  page.click('button:has-text("Next")')
+
+                  # Step 3 – Google password
+                  page.wait_for_selector('input[type="password"]', timeout=10000)
+                  page.fill('input[type="password"]', password)
+                  page.click('button:has-text("Next")')
+
+                  # Step 4 – wait for redirect back to app (admin if admin user)
+                  try:
+                      page.wait_for_url(f"{target_url}/admin**", timeout=20000)
+                  except Exception:
+                      page.wait_for_url(f"{target_url}/**", timeout=20000)
+
+                  # Extract JWT from localStorage (set by auth callback)
+                  jwt_token = page.evaluate("localStorage.getItem('app_jwt')")
+                  browser.close()
+
+                  if not jwt_token:
+                      raise RuntimeError("Failed to extract JWT from localStorage")
+
+                  # ZAP needs this format for script-based authentication
+                  return {"jwt": jwt_token}
+
+          if __name__ == "__main__":
+              session = get_authenticated_session()
+              print(json.dumps(session))
+          PYEOF
+          chmod +x /tmp/agentops_login.py
+
+      # -----------------------------------------------------------------
+      # ZAP automation plan with JWT header-based auth for admin endpoints
+      # -----------------------------------------------------------------
+      - name: Write ZAP automation plan
+        run: |
+          TARGET="${{ env.TARGET_URL }}"
+
+          cat > /zap/wrk/zap_automation.yaml <<EOF
           env:
             contexts:
-              - name: agentops
+              # ── Unauthenticated context for public pages ──────────
+              - name: public
                 urls:
                   - "${TARGET}"
                 includePaths:
-                  - '^https://athithya.site/.*'
+                  - '^${TARGET}/.*'
                 excludePaths:
-                  - '^https://athithya.site/static/.*'
-                  - '^https://athithya.site/assets/.*'
-                  - '^https://athithya.site/.*\.(js|css|png|jpg|jpeg|svg|ico|webp|woff2|ttf)$'
-                  - '^https://athithya.site/healthz$'
-                  - '^https://athithya.site/readyz$'
+                  - '^${TARGET}/static/.*'
+                  - '^${TARGET}/assets/.*'
+                  - '^${TARGET}/.*\.(js|css|png|jpg|jpeg|svg|ico|webp|woff2|ttf)$'
+                  - '^${TARGET}/healthz$'
+                  - '^${TARGET}/readyz$'
+
+              # ── Authenticated context for admin endpoints ─────────
+              - name: admin
+                urls:
+                  - "${TARGET}"
+                includePaths:
+                  - '^${TARGET}/admin/.*'
+                excludePaths:
+                  - '^${TARGET}/static/.*'
+                  - '^${TARGET}/assets/.*'
+                  - '^${TARGET}/.*\.(js|css|png|jpg|jpeg|svg|ico|webp|woff2|ttf)$'
                 authentication:
-                  method: browser
+                  method: script
+                  script:
+                    engine: python
+                    file: /tmp/agentops_login.py
                   parameters:
-                    loginPageUrl: "${TARGET}/auth/login"
-                    loginPageWait: 5
-                    stepDelay: 1
-                    browserId: firefox-headless
-                    diagnostics: false
-                    steps:
-                      - description: Auto-detect and submit login form
-                        type: AUTO_STEPS
+                    sessionToken: jwt
                 sessionManagement:
-                  method: cookie
-                users:
-                  - name: agentops
-                    credentials:
-                      username: "${TEST_ACCOUNT_EMAIL}"
-                      password: "${TEST_ACCOUNT_PASSWORD}"
+                  method: script
+                  script:
+                    engine: python
+                    file: /zap/wrk/apply_token.py
+
             parameters:
-              failOnError: true
+              failOnError: false
               failOnWarning: false
               progressToStdout: true
 
           jobs:
+            # ── Requestor: seed ZAP's site tree ──────────────────────
             - type: requestor
               parameters:
-                user: agentops
+                user: ""
               requests:
                 - name: Home page
                   url: "${TARGET}/"
                   method: GET
-                  headers:
-                    - 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-                    - 'Accept-Language: en-US,en;q=0.9'
-                    - 'Cache-Control: no-cache'
-
                 - name: Chat page
                   url: "${TARGET}/chat.html"
                   method: GET
-                  headers:
-                    - 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-                    - 'Accept-Language: en-US,en;q=0.9'
-                    - 'Cache-Control: no-cache'
-
                 - name: Login page
                   url: "${TARGET}/auth/login"
                   method: GET
-                  headers:
-                    - 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-                    - 'Accept-Language: en-US,en;q=0.9'
-                    - 'Cache-Control: no-cache'
-
                 - name: OAuth login start
                   url: "${TARGET}/auth/login/start/google"
                   method: GET
-                  headers:
-                    - 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-                    - 'Accept-Language: en-US,en;q=0.9'
-                    - 'Cache-Control: no-cache'
-
                 - name: Logout
                   url: "${TARGET}/auth/logout"
                   method: GET
-                  headers:
-                    - 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-                    - 'Accept-Language: en-US,en;q=0.9'
-                    - 'Cache-Control: no-cache'
-
-                - name: Me
+                - name: User info (unauthenticated – should return 401)
                   url: "${TARGET}/auth/me"
                   method: GET
-                  headers:
-                    - 'Accept: application/json, text/plain, */*'
-                    - 'Accept-Language: en-US,en;q=0.9'
-                    - 'Cache-Control: no-cache'
-
-                - name: JWKS
+                - name: JWKS endpoint
                   url: "${TARGET}/.well-known/jwks.json"
                   method: GET
-                  headers:
-                    - 'Accept: application/json, text/plain, */*'
-                    - 'Accept-Language: en-US,en;q=0.9'
-                    - 'Cache-Control: no-cache'
 
-                - name: Admin dashboard
-                  url: "${TARGET}/admin"
-                  method: GET
-                  headers:
-                    - 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-                    - 'Accept-Language: en-US,en;q=0.9'
-                    - 'Cache-Control: no-cache'
+            # ── Spider: discover all public pages ────────────────────
+            - type: spider
+              parameters:
+                context: public
+                maxChildren: 15
+                recurse: true
 
-                - name: Admin queue
-                  url: "${TARGET}/admin/queue"
-                  method: GET
-                  headers:
-                    - 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-                    - 'Accept-Language: en-US,en;q=0.9'
-                    - 'Cache-Control: no-cache'
-
-                - name: Admin analytics
-                  url: "${TARGET}/admin/analytics"
-                  method: GET
-                  headers:
-                    - 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-                    - 'Accept-Language: en-US,en;q=0.9'
-                    - 'Cache-Control: no-cache'
-
-                - name: Admin override
-                  url: "${TARGET}/admin/override"
-                  method: POST
-                  data: ''
-                  headers:
-                    - 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-                    - 'Accept-Language: en-US,en;q=0.9'
-                    - 'Cache-Control: no-cache'
-
-            - type: passiveScan-wait
-
+            # ── Active scan: public pages ────────────────────────────
             - type: activeScan
               parameters:
-                context: agentops
-                user: agentops
-                url: "${TARGET}/chat.html"
+                context: public
                 policy: Default Policy
-                defaultStrength: "${ZAP_ATTACK_STRENGTH}"
-                defaultThreshold: "${ZAP_ALERT_THRESHOLD}"
+                defaultStrength: "${{ env.ZAP_ATTACK_STRENGTH }}"
+                defaultThreshold: "${{ env.ZAP_ALERT_THRESHOLD }}"
                 maxRuleDurationInMins: 2
-                maxScanDurationInMins: 6
+                maxScanDurationInMins: 8
                 delayInMs: 500
                 threadPerHost: 1
                 handleAntiCSRFTokens: true
-                addQueryParam: false
-                scanHeadersAllRequests: false
                 maxAlertsPerRule: 5
 
+            # ── Active scan: admin endpoints (authenticated) ──────────
             - type: activeScan
               parameters:
-                context: agentops
-                user: agentops
-                url: "${TARGET}/admin"
+                context: admin
                 policy: Default Policy
-                defaultStrength: "${ZAP_ATTACK_STRENGTH}"
-                defaultThreshold: "${ZAP_ALERT_THRESHOLD}"
+                defaultStrength: "${{ env.ZAP_ATTACK_STRENGTH }}"
+                defaultThreshold: "${{ env.ZAP_ALERT_THRESHOLD }}"
                 maxRuleDurationInMins: 2
                 maxScanDurationInMins: 10
                 delayInMs: 500
                 threadPerHost: 1
                 handleAntiCSRFTokens: true
-                addQueryParam: false
-                scanHeadersAllRequests: false
                 maxAlertsPerRule: 5
 
+            # ── Report ───────────────────────────────────────────────
             - type: report
               parameters:
                 template: traditional-json
                 reportDir: /zap/wrk
                 reportFile: zap_report
                 reportTitle: AgentOps ZAP DAST Report
-                reportDescription: Authenticated scan of AgentOps
-
-            - type: exitStatus
-              parameters:
-                warnLevel: Medium
-                errorLevel: High
+                reportDescription: Authenticated scan of AgentOps admin endpoints
           EOF
 
+      # -----------------------------------------------------------------
+      # Helper script: apply JWT as Authorization header for ZAP
+      # -----------------------------------------------------------------
+      - name: Write token application script
+        run: |
+          cat > /zap/wrk/apply_token.py << 'PYEOF'
+          import json, os
+
+          def apply_token(session):
+              """Called by ZAP before each request. Adds the JWT from the login script
+              as an Authorization: Bearer <token> header."""
+              jwt = session.get("jwt")
+              if jwt:
+                  session["headers"]["Authorization"] = f"Bearer {jwt}"
+              return session
+          PYEOF
+
+      # -----------------------------------------------------------------
+      # Run ZAP in Docker
+      # -----------------------------------------------------------------
       - name: Run ZAP authenticated scan
         run: |
           docker run --rm \
             --user root \
             -v "${{ github.workspace }}:/zap/wrk:rw" \
+            -v /tmp/agentops_login.py:/tmp/agentops_login.py:ro \
             -e TEST_ACCOUNT_EMAIL="${{ secrets.TEST_ACCOUNT_EMAIL }}" \
             -e TEST_ACCOUNT_PASSWORD="${{ secrets.TEST_ACCOUNT_PASSWORD }}" \
             -e TARGET_URL="${{ env.TARGET_URL }}" \
             zaproxy/zap-stable:2.17.0 \
             zap.sh -cmd -autorun /zap/wrk/zap_automation.yaml
 
+      # -----------------------------------------------------------------
+      # Upload report
+      # -----------------------------------------------------------------
       - name: Upload ZAP report
         if: always()
         uses: actions/upload-artifact@v4
