@@ -1,7 +1,7 @@
 name: ZAP DAST Scan for AgentOps (Authenticated)
 
 on:
-  workflow_dispatch:                  
+  workflow_dispatch:
 
 env:
   TARGET_URL: 'https://athithya.site'
@@ -28,63 +28,44 @@ jobs:
           pip install playwright==1.60.0
           playwright install chromium
 
-      # -----------------------------------------------------------------
-      # Create AgentOps OAuth login script
-      # -----------------------------------------------------------------
+      # Create login script (same as before)
       - name: Create AgentOps login script
         run: |
           cat > /tmp/agentops_login.py << 'PYEOF'
           #!/usr/bin/env python3
-          """Log into AgentOps via Google OAuth and return cookies for an admin session."""
-          import os
-          import json
+          import os, json
           from playwright.sync_api import sync_playwright
-
           def get_authenticated_session():
               email = os.environ["TEST_ACCOUNT_EMAIL"]
               password = os.environ["TEST_ACCOUNT_PASSWORD"]
               target_url = os.environ.get("TARGET_URL", "https://athithya.site").rstrip("/")
-
               with sync_playwright() as p:
                   browser = p.chromium.launch(headless=True)
                   context = browser.new_context()
                   page = context.new_page()
-
-                  # Step 1 – start OAuth flow from the app
                   page.goto(f"{target_url}/auth/login/start/google")
-
-                  # Step 2 – Google sign-in page
                   page.wait_for_selector('input[type="email"]', timeout=10000)
                   page.fill('input[type="email"]', email)
                   page.click('button:has-text("Next")')
-
-                  # Step 3 – Password page
                   page.wait_for_selector('input[type="password"]', timeout=10000)
                   page.fill('input[type="password"]', password)
                   page.click('button:has-text("Next")')
-
-                  # Step 4 – After successful login the app redirects to /admin
                   try:
                       page.wait_for_url(f"{target_url}/admin**", timeout=20000)
                   except Exception:
                       page.wait_for_url(f"{target_url}/**", timeout=20000)
-
-                  # Collect cookies for the target domain
                   cookies = context.cookies()
                   domain = target_url.split("://")[1].split("/")[0]
-                  relevant = {c["name"]: c["value"] for c in cookies if domain in c.get("domain", "")}
+                  relevant = {c["name"]: c["value"] for c in cookies if domain in c.get("domain","")}
                   browser.close()
                   return relevant
-
           if __name__ == "__main__":
               session = get_authenticated_session()
               print(json.dumps(session))
           PYEOF
           chmod +x /tmp/agentops_login.py
 
-      # -----------------------------------------------------------------
-      # Create ZAP automation plan (corrected syntax)
-      # -----------------------------------------------------------------
+      # Create ZAP automation plan (same as before)
       - name: Create ZAP automation plan
         run: |
           TARGET="${{ env.TARGET_URL }}"
@@ -112,18 +93,18 @@ jobs:
                   - url: "${TARGET}/healthz"
                   - url: "${TARGET}/readyz"
                 alertFilters:
-                  - ruleId: 40018   # SQL Injection – often false positive on modern ORM
+                  - ruleId: 40018
                     newRisk: "False Positive"
                     url: "${TARGET}/.*"
                     parameter: ".*"
-                  - ruleId: 40012   # Reflected XSS – our responses are JSON/HTML escaped
+                  - ruleId: 40012
                     newRisk: "False Positive"
                     url: "${TARGET}/.*"
                     parameter: ".*"
-                  - ruleId: 90018   # Server header exposure (Cloudflare)
+                  - ruleId: 90018
                     newRisk: "False Positive"
                     url: "${TARGET}/.*"
-                  - ruleId: 40016   # Path traversal
+                  - ruleId: 40016
                     newRisk: "False Positive"
                     url: "${TARGET}/.*"
             parameters:
@@ -131,7 +112,6 @@ jobs:
               progressToStdout: true
               maxDuration: 60
               maxRuleDurationInMins: 3
-
           jobs:
             - type: "spider"
               parameters:
@@ -144,7 +124,6 @@ jobs:
                 maxRuleDurationInMins: 5
                 attackStrength: "${{ env.ZAP_ATTACK_STRENGTH }}"
                 alertThreshold: "${{ env.ZAP_ALERT_THRESHOLD }}"
-                # Fixed: use 'urls' (plural) with a list
                 urls:
                   - "${TARGET}/admin"
                   - "${TARGET}/admin/queue"
@@ -154,28 +133,22 @@ jobs:
             - type: "report"
               parameters:
                 template: "traditional-json"
-                reportFile: "/tmp/zap_report.json"
+                reportFile: "/zap/wrk/zap_report.json"
           EOF
 
-      # -----------------------------------------------------------------
-      # Run ZAP authenticated scan
-      # -----------------------------------------------------------------
-      - name: Run ZAP authenticated scan
-        uses: zaproxy/action-automation@v0.7.0
-        env:
-          TEST_ACCOUNT_EMAIL: ${{ secrets.TEST_ACCOUNT_EMAIL }}
-          TEST_ACCOUNT_PASSWORD: ${{ secrets.TEST_ACCOUNT_PASSWORD }}
-          TARGET_URL: ${{ env.TARGET_URL }}
-          POST_LOGIN_PATTERN: ${{ env.POST_LOGIN_PATTERN }}
-        with:
-          plan_path: '/tmp/zap_automation.yaml'
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          issue_title: 'ZAP DAST Report - AgentOps'
-          issue_labels: 'security,dast,automated'
+      # Run ZAP using Docker (correct method)
+      - name: Run ZAP authenticated scan (Docker)
+        run: |
+          docker run --rm \
+            -v /tmp:/zap/wrk \
+            -e TEST_ACCOUNT_EMAIL="${{ secrets.TEST_ACCOUNT_EMAIL }}" \
+            -e TEST_ACCOUNT_PASSWORD="${{ secrets.TEST_ACCOUNT_PASSWORD }}" \
+            -e TARGET_URL="${{ env.TARGET_URL }}" \
+            -e POST_LOGIN_PATTERN="${{ env.POST_LOGIN_PATTERN }}" \
+            zaproxy/zap-stable:latest \
+            zap-automation -t /zap/wrk/zap_automation.yaml
 
-      # -----------------------------------------------------------------
-      # Upload JSON report as artifact
-      # -----------------------------------------------------------------
+      # Upload report
       - name: Upload ZAP report
         if: always()
         uses: actions/upload-artifact@v4

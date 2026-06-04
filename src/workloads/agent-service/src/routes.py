@@ -319,8 +319,8 @@ async def callback(request: Request, provider: str):
     token = None
     try:
         token = await client.authorize_access_token(request)
-    except (OAuthError, InvalidClaimError) as exc:
-        log.warning("Token exchange error, trying manual fallback: %s", exc)
+    except (OAuthError, InvalidClaimError):
+        log.warning("Token exchange error, trying manual fallback")
         code = request.query_params.get("code")
         if code:
             token = await _manual_token_exchange(provider, client, code)
@@ -399,7 +399,7 @@ async def _manual_token_exchange(provider: str, client, code: str) -> dict[str, 
             resp.raise_for_status()
             return resp.json()
     except Exception:
-        log.exception("manual token exchange failed for %s", provider)
+        log.exception("manual token exchange failed ")
         return {}
 
 
