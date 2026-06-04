@@ -1,6 +1,12 @@
 name: ZAP DAST Scan for AgentOps (Authenticated)
 
 on:
+  # push:
+  #  branches: [ main ]
+  # pull_request:
+  #  branches: [ main ]
+  # schedule:
+  #  - cron: '0 6 * * 1'  # Every Monday at 06:00 UTC
   workflow_dispatch:
 
 env:
@@ -16,11 +22,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Prepare report directory
-        run: |
-          mkdir -p reports
-          chmod 777 reports
 
       # -----------------------------------------------------------------
       # Login script: extracts JWT from localStorage after OAuth flow
@@ -43,33 +44,32 @@ jobs:
                   context = browser.new_context()
                   page = context.new_page()
 
-                  # Step 1 – start the OAuth flow from the app
+                  # Start OAuth flow
                   page.goto(f"{target_url}/auth/login/start/google")
 
-                  # Step 2 – Google email
+                  # Google email
                   page.wait_for_selector('input[type="email"]', timeout=10000)
                   page.fill('input[type="email"]', email)
                   page.click('button:has-text("Next")')
 
-                  # Step 3 – Google password
+                  # Google password
                   page.wait_for_selector('input[type="password"]', timeout=10000)
                   page.fill('input[type="password"]', password)
                   page.click('button:has-text("Next")')
 
-                  # Step 4 – wait for redirect back to app (admin if admin user)
+                  # Wait for redirect back to app
                   try:
                       page.wait_for_url(f"{target_url}/admin**", timeout=20000)
                   except Exception:
                       page.wait_for_url(f"{target_url}/**", timeout=20000)
 
-                  # Extract JWT from localStorage (set by auth callback)
+                  # Extract JWT from localStorage
                   jwt_token = page.evaluate("localStorage.getItem('app_jwt')")
                   browser.close()
 
                   if not jwt_token:
                       raise RuntimeError("Failed to extract JWT from localStorage")
 
-                  # ZAP needs this format for script-based authentication
                   return {"jwt": jwt_token}
 
           if __name__ == "__main__":
@@ -79,16 +79,16 @@ jobs:
           chmod +x /tmp/agentops_login.py
 
       # -----------------------------------------------------------------
-      # ZAP automation plan with JWT header-based auth for admin endpoints
+      # ZAP automation plan (written to workspace directory)
       # -----------------------------------------------------------------
       - name: Write ZAP automation plan
         run: |
           TARGET="${{ env.TARGET_URL }}"
 
-          cat > /zap/wrk/zap_automation.yaml <<EOF
+          cat > zap_automation.yaml <<EOF
           env:
             contexts:
-              # ── Unauthenticated context for public pages ──────────
+              # Unauthenticated context for public pages
               - name: public
                 urls:
                   - "${TARGET}"
@@ -97,11 +97,11 @@ jobs:
                 excludePaths:
                   - '^${TARGET}/static/.*'
                   - '^${TARGET}/assets/.*'
-                  - '^${TARGET}/.*\.(js|css|png|jpg|jpeg|svg|ico|webp|woff2|ttf)$'
-                  - '^${TARGET}/healthz$'
-                  - '^${TARGET}/readyz$'
+                  - '^${TARGET}/.*\.(js|css|png|jpg|jpeg|svg|ico|webp|woff2|ttf)$$'
+                  - '^${TARGET}/healthz$$'
+                  - '^${TARGET}/readyz$$'
 
-              # ── Authenticated context for admin endpoints ─────────
+              # Authenticated context for admin endpoints
               - name: admin
                 urls:
                   - "${TARGET}"
@@ -110,7 +110,7 @@ jobs:
                 excludePaths:
                   - '^${TARGET}/static/.*'
                   - '^${TARGET}/assets/.*'
-                  - '^${TARGET}/.*\.(js|css|png|jpg|jpeg|svg|ico|webp|woff2|ttf)$'
+                  - '^${TARGET}/.*\.(js|css|png|jpg|jpeg|svg|ico|webp|woff2|ttf)$$'
                 authentication:
                   method: script
                   script:
@@ -130,10 +130,9 @@ jobs:
               progressToStdout: true
 
           jobs:
-            # ── Requestor: seed ZAP's site tree ──────────────────────
+            # Seed ZAP's site tree with known endpoints
             - type: requestor
-              parameters:
-                user: ""
+              parameters: {}
               requests:
                 - name: Home page
                   url: "${TARGET}/"
@@ -150,21 +149,21 @@ jobs:
                 - name: Logout
                   url: "${TARGET}/auth/logout"
                   method: GET
-                - name: User info (unauthenticated – should return 401)
+                - name: User info (unauthenticated)
                   url: "${TARGET}/auth/me"
                   method: GET
                 - name: JWKS endpoint
                   url: "${TARGET}/.well-known/jwks.json"
                   method: GET
 
-            # ── Spider: discover all public pages ────────────────────
+            # Discover public pages
             - type: spider
               parameters:
                 context: public
                 maxChildren: 15
                 recurse: true
 
-            # ── Active scan: public pages ────────────────────────────
+            # Active scan public pages
             - type: activeScan
               parameters:
                 context: public
@@ -178,7 +177,7 @@ jobs:
                 handleAntiCSRFTokens: true
                 maxAlertsPerRule: 5
 
-            # ── Active scan: admin endpoints (authenticated) ──────────
+            # Active scan admin endpoints (authenticated)
             - type: activeScan
               parameters:
                 context: admin
@@ -192,7 +191,7 @@ jobs:
                 handleAntiCSRFTokens: true
                 maxAlertsPerRule: 5
 
-            # ── Report ───────────────────────────────────────────────
+            # Generate report
             - type: report
               parameters:
                 template: traditional-json
@@ -203,16 +202,15 @@ jobs:
           EOF
 
       # -----------------------------------------------------------------
-      # Helper script: apply JWT as Authorization header for ZAP
+      # Helper script: apply JWT as Authorization header
       # -----------------------------------------------------------------
       - name: Write token application script
         run: |
-          cat > /zap/wrk/apply_token.py << 'PYEOF'
+          cat > apply_token.py << 'PYEOF'
           import json, os
 
           def apply_token(session):
-              """Called by ZAP before each request. Adds the JWT from the login script
-              as an Authorization: Bearer <token> header."""
+              """Called by ZAP before each request. Adds the JWT as an Authorization header."""
               jwt = session.get("jwt")
               if jwt:
                   session["headers"]["Authorization"] = f"Bearer {jwt}"
@@ -220,7 +218,7 @@ jobs:
           PYEOF
 
       # -----------------------------------------------------------------
-      # Run ZAP in Docker
+      # Run ZAP in Docker (mount workspace as /zap/wrk)
       # -----------------------------------------------------------------
       - name: Run ZAP authenticated scan
         run: |
