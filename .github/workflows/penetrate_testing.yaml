@@ -197,3 +197,13 @@ jobs:
             zaproxy/zap-stable:2.17.0 \
             zap.sh -cmd -autorun /zap/wrk/zap_automation.yaml
 
+      # -----------------------------------------------------------------
+      # Upload report
+      # -----------------------------------------------------------------
+      - name: Upload ZAP report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-dast-report
+          path: zap_report*
+          
