@@ -72,7 +72,13 @@ variable "cloudflare_hostname" {
 
 
 variable "create_rds" {
-  description = "Whether to create RDS instance (false for staging, true for prod)"
+  description = "Whether to create RDS instance"
+  type        = bool
+  default     = true
+}
+
+variable "rds_publicly_accessible" {
+  description = "⚠️ TEMPORARY: Make RDS reachable from internet (for tutorials/seeding data only). Never use in production."
   type        = bool
   default     = false
 }

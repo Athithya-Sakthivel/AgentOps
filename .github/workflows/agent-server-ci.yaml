@@ -21,8 +21,6 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  AWS_REGION: ap-south-1
-  AWS_ACCOUNT_ID: "681802563986"
   ROLE_NAME: gh-actions-agentops-agent
   ECR_REPOSITORY: agentops-staging-agent-service
 
@@ -43,7 +41,7 @@ jobs:
       - name: Construct AWS role ARN
         id: aws-role
         run: |
-          echo "arn=arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/${{ env.ROLE_NAME }}" >> "$GITHUB_OUTPUT"
+          echo "arn=arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ env.ROLE_NAME }}" >> "$GITHUB_OUTPUT"
 
       - name: Compute image metadata
         id: image-meta
@@ -51,7 +49,7 @@ jobs:
         run: |
           set -euo pipefail
           IMAGE_TAG="$(TZ=Asia/Kolkata date +%Y-%m-%d-%H-%M)--$(git rev-parse --short HEAD)"
-          REGISTRY_HOST="${{ env.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com"
+          REGISTRY_HOST="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com"
           PRIMARY_IMAGE="${REGISTRY_HOST}/${{ env.ECR_REPOSITORY }}:${IMAGE_TAG}"
           STAGING_IMAGE="${REGISTRY_HOST}/${{ env.ECR_REPOSITORY }}:staging"
           echo "primary_image=${PRIMARY_IMAGE}" >> "$GITHUB_OUTPUT"
@@ -88,7 +86,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v6.1.1
         with:
           role-to-assume: ${{ steps.aws-role.outputs.arn }}
-          aws-region: ${{ env.AWS_REGION }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Log in to ECR
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -101,7 +99,7 @@ jobs:
           aws ecr batch-delete-image \
             --repository-name "${{ env.ECR_REPOSITORY }}" \
             --image-ids imageTag=staging \
-            --region "${{ env.AWS_REGION }}" || true
+            --region "${{ secrets.AWS_REGION }}" || true
 
       - name: Push image tags
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

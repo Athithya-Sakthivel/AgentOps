@@ -7,7 +7,6 @@ sudo apt-get update -qq
 sudo apt-get install -y -qq \
   ca-certificates curl unzip vim make tree jq python3-pip python3-venv postgresql-client-common postgresql-client
 
-
 # AWS CLI v2
 curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
 unzip -q /tmp/awscliv2.zip -d /tmp/awscli
@@ -26,7 +25,5 @@ python3 -m pip install --break-system-packages -q \
   httpx==0.28.1 
 
 pre-commit install --install-hooks
-
-docker pull docker.io/library/postgres:18.4
 
 curl -L "https://github.com/cloudflare/cloudflared/releases/download/2026.5.0/cloudflared-linux-amd64" -o /usr/local/bin/cloudflared && chmod +x /usr/local/bin/cloudflared

@@ -48,6 +48,12 @@ variable "db_password" {
   default     = null
 }
 
+variable "publicly_accessible" {
+  description = "Whether the RDS instance should have a public IP (true only for tutorials seeding fake tables)"
+  type        = bool
+  default     = false
+}
+
 variable "tags" {
   description = "Common tags for all resources"
   type        = map(string)

@@ -44,7 +44,7 @@ export TF_VAR_private_subnet_cidrs="${TF_VAR_private_subnet_cidrs:-[\"10.20.11.0
 export TF_VAR_tags="${TF_VAR_tags:-{\"Project\":\"agentops\",\"Stack\":\"staging\"}}"
 
 # ---- S3 & ECR ----
-export TF_VAR_bucket_name="${TF_VAR_bucket_name:-agentops-staging-embeddings-bucket}"
+export TF_VAR_bucket_name="${TF_VAR_bucket_name:-agentops-staging-embeddings-bucket-$(aws sts get-caller-identity --query Account --output text)}"
 export TF_VAR_force_destroy="${TF_VAR_force_destroy:-true}"
 export TF_VAR_agent_repository_name="${TF_VAR_agent_repository_name:-agentops-staging-agent-service}"
 export TF_VAR_mcp_repository_name="${TF_VAR_mcp_repository_name:-agentops-staging-mcp-server}"
@@ -59,16 +59,17 @@ if [ -z "${TF_VAR_cloudflare_tunnel_token:-}" ]; then
 fi
 
 # ---- RDS (disabled in staging to save cost) ----
-export TF_VAR_create_rds="${TF_VAR_create_rds:-false}"
+export TF_VAR_create_rds="${TF_VAR_create_rds:-true}"
 export TF_VAR_db_password="${TF_VAR_db_password:-SecurePass123!}"  # or leave empty – Terraform generates random password
+export TF_VAR_rds_publicly_accessible="true" # true only for tutorials seeding fake tables
 
 # ---- Budget & Alerts ----
-export TF_VAR_monthly_budget_amount="${TF_VAR_monthly_budget_amount:-100}"
-export TF_VAR_alert_emails="${TF_VAR_alert_emails:-[\"athithya651@gmail.com\"]}"
-export TF_VAR_alarm_sns_topic_arn="${TF_VAR_alarm_sns_topic_arn:-arn:aws:sns:ap-south-1:681802563986:agentops-staging-alarms}"   
+# export TF_VAR_monthly_budget_amount="${TF_VAR_monthly_budget_amount:-10}"
+# export TF_VAR_alert_emails="${TF_VAR_alert_emails:-[\"athithya651@gmail.com\"]}"
+# export TF_VAR_alarm_sns_topic_arn="${TF_VAR_alarm_sns_topic_arn:-arn:aws:sns:ap-south-1:681802563986:agentops-staging-alarms}"   
 
 # ---- ECS Flag (deploy ECS cluster and services) ----
-export TF_VAR_enable_ecs="${TF_VAR_enable_ecs:-false}"
+export TF_VAR_enable_ecs="${TF_VAR_enable_ecs:-true}"
 
 # ----------------------------------------------------------------------
 # Helper functions

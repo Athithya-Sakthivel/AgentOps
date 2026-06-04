@@ -44,6 +44,21 @@ output "dynamodb_table" {
   }
 }
 
+output "rds_db_name" {
+  value = module.rds.db_name
+}
+
+output "rds_connection_string" {
+  description = "PostgreSQL connection URL (password included)"
+  value       = module.rds.connection_string
+  sensitive   = true
+}
+
+output "rds_security_group_id" {
+  description = "ID of the RDS security group"
+  value       = module.security_groups.rds_security_group_id
+}
+
 output "ecr_repositories" {
   description = "ECR repository URLs and ARNs"
   value = {

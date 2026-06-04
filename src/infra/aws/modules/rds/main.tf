@@ -62,7 +62,7 @@ resource "aws_db_instance" "this" {
   db_subnet_group_name   = try(aws_db_subnet_group.this[0].name, null)
   vpc_security_group_ids = [var.security_group_id]
 
-  publicly_accessible        = false
+  publicly_accessible        = var.publicly_accessible
   skip_final_snapshot        = var.environment != "prod"
   deletion_protection        = var.environment == "prod"
   backup_retention_period    = var.environment == "prod" ? 7 : 1

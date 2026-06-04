@@ -59,21 +59,23 @@ module "dynamodb" {
 # RDS INSTANCE
 # ----------------------------------------------------------------------
 # ----------------------------------------------------------------------
-# RDS (PostgreSQL) – optional
+# RDS (PostgreSQL)
 # ----------------------------------------------------------------------
 module "rds" {
   source = "./modules/rds"
 
-  create_rds         = var.create_rds
-  name_prefix        = var.name_prefix
-  environment        = var.environment
-  vpc_id             = module.vpc.vpc_id
-  private_subnet_ids = module.vpc.private_subnet_ids
-  security_group_id  = module.security_groups.rds_security_group_id
-  db_name            = "kestral"
-  db_username        = "agentops"
-  db_password        = var.db_password
-  tags               = var.tags
+  create_rds  = var.create_rds
+  name_prefix = var.name_prefix
+  environment = var.environment
+  vpc_id      = module.vpc.vpc_id
+  # Instead of always private subnets, conditionally use public subnets
+  private_subnet_ids  = var.rds_publicly_accessible ? module.vpc.public_subnet_ids : module.vpc.private_subnet_ids # for tutorials
+  security_group_id   = module.security_groups.rds_security_group_id
+  db_name             = "kestral"
+  db_username         = "agentops"
+  db_password         = var.db_password
+  publicly_accessible = var.rds_publicly_accessible # also pass this flag
+  tags                = var.tags
 }
 
 # ----------------------------------------------------------------------
@@ -205,16 +207,4 @@ module "observability" {
   retention_in_days   = var.environment == "prod" ? 14 : 7
   alarm_sns_topic_arn = var.alarm_sns_topic_arn
   tags                = var.tags
-}
-
-# ----------------------------------------------------------------------
-# BUDGET (cost alerts)
-# ----------------------------------------------------------------------
-module "budget" {
-  source = "./modules/budget"
-
-  name_prefix           = var.name_prefix
-  monthly_budget_amount = var.monthly_budget_amount
-  alert_emails          = var.alert_emails
-  tags                  = var.tags
 }
