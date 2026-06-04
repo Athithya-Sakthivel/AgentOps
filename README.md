@@ -120,6 +120,8 @@ bash src/offline/index-policies/commands.sh
 
 ```sh
 gh secret set AWS_ACCOUNT_ID --body $(aws sts get-caller-identity --query Account --output text)
+echo " " >> src/workloads/agent-service/infra_tests.sh
+echo " " >> src/workloads/mcp-server/test_locally.sh
 gh secret set AWS_REGION --body $TF_VAR_region
 git add . && git commit -m "Rebuilding mcp and agent docker images" && git push origin main
 ```

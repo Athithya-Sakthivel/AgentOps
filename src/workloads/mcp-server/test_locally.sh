@@ -273,4 +273,4 @@ else
   echo "    Server logs : cat /tmp/mcp-server.log"
   echo "    Manual test : fastmcp call http://localhost:${MCP_PORT}/mcp lookup_customer email=priya.sharma@email.com"
   exit 1
-fi
+fi 
