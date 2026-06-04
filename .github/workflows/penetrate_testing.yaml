@@ -5,9 +5,8 @@ on:
 
 env:
   TARGET_URL: 'https://athithya.site'
-  POST_LOGIN_PATTERN: '**/admin**'
-  ZAP_ATTACK_STRENGTH: 'MEDIUM'
-  ZAP_ALERT_THRESHOLD: 'MEDIUM'
+  ZAP_ATTACK_STRENGTH: 'Medium'
+  ZAP_ALERT_THRESHOLD: 'Medium'
 
 jobs:
   zap-scan:
@@ -15,143 +14,130 @@ jobs:
     timeout-minutes: 45
 
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.14.3
-        uses: actions/setup-python@v6.2.0
-        with:
-          python-version: '3.14.3'
-
-      - name: Install Playwright 1.60.0
+      - name: Write ZAP automation plan
+        env:
+          TEST_ACCOUNT_EMAIL: ${{ secrets.TEST_ACCOUNT_EMAIL }}
+          TEST_ACCOUNT_PASSWORD: ${{ secrets.TEST_ACCOUNT_PASSWORD }}
         run: |
-          pip install playwright==1.60.0
-          playwright install chromium
+          TARGET="$TARGET_URL"
 
-      # Create login script (same as before)
-      - name: Create AgentOps login script
-        run: |
-          cat > /tmp/agentops_login.py << 'PYEOF'
-          #!/usr/bin/env python3
-          import os, json
-          from playwright.sync_api import sync_playwright
-          def get_authenticated_session():
-              email = os.environ["TEST_ACCOUNT_EMAIL"]
-              password = os.environ["TEST_ACCOUNT_PASSWORD"]
-              target_url = os.environ.get("TARGET_URL", "https://athithya.site").rstrip("/")
-              with sync_playwright() as p:
-                  browser = p.chromium.launch(headless=True)
-                  context = browser.new_context()
-                  page = context.new_page()
-                  page.goto(f"{target_url}/auth/login/start/google")
-                  page.wait_for_selector('input[type="email"]', timeout=10000)
-                  page.fill('input[type="email"]', email)
-                  page.click('button:has-text("Next")')
-                  page.wait_for_selector('input[type="password"]', timeout=10000)
-                  page.fill('input[type="password"]', password)
-                  page.click('button:has-text("Next")')
-                  try:
-                      page.wait_for_url(f"{target_url}/admin**", timeout=20000)
-                  except Exception:
-                      page.wait_for_url(f"{target_url}/**", timeout=20000)
-                  cookies = context.cookies()
-                  domain = target_url.split("://")[1].split("/")[0]
-                  relevant = {c["name"]: c["value"] for c in cookies if domain in c.get("domain","")}
-                  browser.close()
-                  return relevant
-          if __name__ == "__main__":
-              session = get_authenticated_session()
-              print(json.dumps(session))
-          PYEOF
-          chmod +x /tmp/agentops_login.py
-
-      # Create ZAP automation plan (same as before)
-      - name: Create ZAP automation plan
-        run: |
-          TARGET="${{ env.TARGET_URL }}"
-          cat > /tmp/zap_automation.yaml << EOF
+          cat > zap_automation.yaml <<EOF
           env:
             contexts:
-              - name: "agentops_admin_context"
-                url: "${TARGET}"
-                authentication:
-                  method: "script"
-                  script:
-                    engine: "python"
-                    file: "/tmp/agentops_login.py"
-                  parameters:
-                    sessionToken: "cookie"
-                sessionManagement:
-                  method: "cookie"
-                technology:
-                  - "Python"
-                  - "JavaScript"
+              - name: agentops
+                urls:
+                  - "${TARGET}"
+                includePaths:
+                  - "${TARGET}/.*"
                 excludePaths:
-                  - url: "${TARGET}/static/.*"
-                  - url: "${TARGET}/assets/.*"
-                  - url: "${TARGET}/.*\.(js|css|png|jpg|svg|ico|webp|woff2|ttf)$"
-                  - url: "${TARGET}/healthz"
-                  - url: "${TARGET}/readyz"
-                alertFilters:
-                  - ruleId: 40018
-                    newRisk: "False Positive"
-                    url: "${TARGET}/.*"
-                    parameter: ".*"
-                  - ruleId: 40012
-                    newRisk: "False Positive"
-                    url: "${TARGET}/.*"
-                    parameter: ".*"
-                  - ruleId: 90018
-                    newRisk: "False Positive"
-                    url: "${TARGET}/.*"
-                  - ruleId: 40016
-                    newRisk: "False Positive"
-                    url: "${TARGET}/.*"
+                  - "${TARGET}/static/.*"
+                  - "${TARGET}/assets/.*"
+                  - "${TARGET}/.*\\.(js|css|png|jpg|jpeg|svg|ico|webp|woff2|ttf)$"
+                  - "${TARGET}/healthz"
+                  - "${TARGET}/readyz"
+                authentication:
+                  method: browser
+                  parameters:
+                    loginPageUrl: "${TARGET}/auth/login"
+                    loginPageWait: 2
+                    browserId: firefox-headless
+                    steps: []
+                  verification:
+                    method: poll
+                    loggedInRegex: '\\Q 200 OK\\E'
+                    loggedOutRegex: '\\Q 401 Unauthorized\\E'
+                    pollFrequency: 60
+                    pollUnits: seconds
+                    pollUrl: "${TARGET}/auth/me"
+                    pollPostData: ""
+                sessionManagement:
+                  method: cookie
+                users:
+                  - name: agentops
+                    credentials:
+                      username: "${TEST_ACCOUNT_EMAIL}"
+                      password: "${TEST_ACCOUNT_PASSWORD}"
             parameters:
               failOnError: true
+              failOnWarning: false
               progressToStdout: true
-              maxDuration: 60
-              maxRuleDurationInMins: 3
+
           jobs:
-            - type: "spider"
+            - type: spider
               parameters:
-                maxChildren: 15
-                recurse: true
-                context: "agentops_admin_context"
-            - type: "activeScan"
+                context: agentops
+                user: agentops
+
+            - type: requestor
               parameters:
-                context: "agentops_admin_context"
+                user: agentops
+              requests:
+                - url: "${TARGET}/"
+                  method: GET
+                - url: "${TARGET}/chat.html"
+                  method: GET
+                - url: "${TARGET}/auth/login"
+                  method: GET
+                - url: "${TARGET}/auth/login/start/google"
+                  method: GET
+                - url: "${TARGET}/auth/logout"
+                  method: GET
+                - url: "${TARGET}/auth/me"
+                  method: GET
+                - url: "${TARGET}/.well-known/jwks.json"
+                  method: GET
+                - url: "${TARGET}/admin"
+                  method: GET
+                - url: "${TARGET}/admin/queue"
+                  method: GET
+                - url: "${TARGET}/admin/analytics"
+                  method: GET
+                - url: "${TARGET}/admin/override"
+                  method: POST
+                  data: ""
+
+            - type: passiveScan-wait
+
+            - type: activeScan
+              parameters:
+                context: agentops
+                user: agentops
                 maxRuleDurationInMins: 5
-                attackStrength: "${{ env.ZAP_ATTACK_STRENGTH }}"
-                alertThreshold: "${{ env.ZAP_ALERT_THRESHOLD }}"
-                urls:
-                  - "${TARGET}/admin"
-                  - "${TARGET}/admin/queue"
-                  - "${TARGET}/admin/analytics"
-                  - "${TARGET}/admin/override"
-                  - "${TARGET}/admin/ticket/{id}"
-            - type: "report"
+                attackStrength: "${ZAP_ATTACK_STRENGTH}"
+                alertThreshold: "${ZAP_ALERT_THRESHOLD}"
+
+            - type: report
               parameters:
-                template: "traditional-json"
-                reportFile: "/zap/wrk/zap_report.json"
+                template: traditional-json
+                reportDir: /zap/wrk
+                reportFile: zap_report
+                reportTitle: AgentOps ZAP DAST Report
+                reportDescription: Authenticated scan of AgentOps
+
+            - type: exitStatus
+              parameters:
+                warnLevel: Medium
+                errorLevel: High
           EOF
 
-      # Run ZAP using Docker (correct method)
-      - name: Run ZAP authenticated scan (Docker)
+      - name: Run ZAP authenticated scan
         run: |
           docker run --rm \
-            -v /tmp:/zap/wrk \
+            -v "${{ github.workspace }}:/zap/wrk:rw" \
             -e TEST_ACCOUNT_EMAIL="${{ secrets.TEST_ACCOUNT_EMAIL }}" \
             -e TEST_ACCOUNT_PASSWORD="${{ secrets.TEST_ACCOUNT_PASSWORD }}" \
             -e TARGET_URL="${{ env.TARGET_URL }}" \
-            -e POST_LOGIN_PATTERN="${{ env.POST_LOGIN_PATTERN }}" \
-            zaproxy/zap-stable:latest \
-            zap-automation -t /zap/wrk/zap_automation.yaml
+            -e ZAP_ATTACK_STRENGTH="${{ env.ZAP_ATTACK_STRENGTH }}" \
+            -e ZAP_ALERT_THRESHOLD="${{ env.ZAP_ALERT_THRESHOLD }}" \
+            zaproxy/zap-stable:2.17.0 \
+            zap.sh -cmd -autorun /zap/wrk/zap_automation.yaml
 
-      # Upload report
       - name: Upload ZAP report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: zap-dast-report
-          path: /tmp/zap_report.json
+          path: zap_report*
