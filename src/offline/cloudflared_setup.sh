@@ -95,12 +95,10 @@ ingress:
     path: /.well-known/*
     service: http://localhost:${AGENT_PORT}
 
-  # ── All other requests (static files, frontend) ─────────────────
-  - hostname: ${DOMAIN}
-    path: /*
-    service: http://localhost:${AGENT_PORT}
-
+  # Catch‑all – all other requests go to agent service
+  - service: http://localhost:${AGENT_PORT}
 YAML
+
 
 echo "[INFO] Config written to ${CONFIG_FILE}"
 

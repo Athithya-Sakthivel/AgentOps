@@ -1,4 +1,3 @@
-
 # AgentOps Infrastructure Documentation
 
 ## 1. Overview

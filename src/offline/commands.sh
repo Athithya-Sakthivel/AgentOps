@@ -50,3 +50,4 @@ export PORT=8000
 export MCP_SERVER_URL="http://localhost:8001/mcp"
 export DATABASE_URL="postgresql://agentops:localdev@localhost:5432/kestral"
 python3 src/main.py
+

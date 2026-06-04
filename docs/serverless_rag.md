@@ -89,16 +89,6 @@ At that point, consider:
 
 ---
 
-## Recommended Stack
-
-- Amazon Bedrock (Titan v2 embeddings + Claude LLM)
-- Amazon S3 (embeddings storage)
-- NumPy (in-process cosine similarity)
-- LangGraph + DSPy (agent orchestration)
-- ECS Managed Instances (compute, not Lambda—retrieval runs inline)
-
----
-
 ## Key Principle
 
 For small internal document corpora:

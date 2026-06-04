@@ -1,8 +1,8 @@
 {
 	"@programName": "ZAP",
 	"@version": "2.17.0",
-	"@generated": "Thu, 4 Jun 2026 03:07:54",
-	"created": "2026-06-04T03:07:54.666303026Z",
+	"@generated": "Thu, 4 Jun 2026 03:52:55",
+	"created": "2026-06-04T03:52:55.959368174Z",
 	"insights":[
 		{
 			"level": "Low",
@@ -10,7 +10,7 @@
 			"site": "",
 			"key": "insight.log.error",
 			"description": "ZAP errors logged - see the zap.log file for details",
-			"statistic": "292"
+			"statistic": "427"
 		},
 		{
 			"level": "Low",
@@ -26,7 +26,7 @@
 			"site": "https://athithya.site",
 			"key": "insight.code.2xx",
 			"description": "Percentage of responses with status code 2xx",
-			"statistic": "12"
+			"statistic": "18"
 		},
 		{
 			"level": "Info",
@@ -34,7 +34,7 @@
 			"site": "https://athithya.site",
 			"key": "insight.code.4xx",
 			"description": "Percentage of responses with status code 4xx",
-			"statistic": "87"
+			"statistic": "81"
 		},
 		{
 			"level": "Info",
@@ -42,7 +42,7 @@
 			"site": "https://athithya.site",
 			"key": "insight.endpoint.ctype.application/json",
 			"description": "Percentage of endpoints with content type application/json",
-			"statistic": "11"
+			"statistic": "9"
 		},
 		{
 			"level": "Info",
@@ -50,7 +50,7 @@
 			"site": "https://athithya.site",
 			"key": "insight.endpoint.ctype.text/html",
 			"description": "Percentage of endpoints with content type text/html",
-			"statistic": "88"
+			"statistic": "90"
 		},
 		{
 			"level": "Info",
@@ -58,7 +58,7 @@
 			"site": "https://athithya.site",
 			"key": "insight.endpoint.method.GET",
 			"description": "Percentage of endpoints with method GET",
-			"statistic": "94"
+			"statistic": "90"
 		},
 		{
 			"level": "Info",
@@ -66,7 +66,7 @@
 			"site": "https://athithya.site",
 			"key": "insight.endpoint.method.POST",
 			"description": "Percentage of endpoints with method POST",
-			"statistic": "5"
+			"statistic": "9"
 		},
 		{
 			"level": "Info",
@@ -74,7 +74,7 @@
 			"site": "https://athithya.site",
 			"key": "insight.endpoint.total",
 			"description": "Count of total endpoints",
-			"statistic": "17"
+			"statistic": "11"
 		},
 		{
 			"level": "Info",
@@ -82,7 +82,7 @@
 			"site": "https://athithya.site",
 			"key": "insight.response.slow",
 			"description": "Percentage of slow responses",
-			"statistic": "17"
+			"statistic": "27"
 		}
 	],
 	"site":[ 
@@ -103,14 +103,24 @@
 					"desc": "<p>The Content Security Policy fails to define one of the directives that has no fallback. Missing/excluding them is the same as allowing anything.</p>",
 					"instances":[ 
 						{
-							"id": "22",
+							"id": "1",
+							"uri": "https://athithya.site/",
+							"nodeName": "https:\/\/athithya.site\/",
+							"method": "GET",
+							"param": "Content-Security-Policy",
+							"attack": "",
+							"evidence": "default-src 'none'; script-src 'nonce-aBsHTD1Pvau4YggYmLormH' 'unsafe-eval' https://challenges.cloudflare.com; script-src-attr 'none'; style-src 'unsafe-inline'; img-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com blob:; child-src 'self' https://challenges.cloudflare.com blob:; worker-src blob:; form-action http: https:; base-uri 'self'",
+							"otherinfo": "The directive(s): frame-ancestors, form-action is/are among the directives that do not fallback to default-src."
+						},
+						{
+							"id": "3",
 							"uri": "https://athithya.site/auth/login",
 							"nodeName": "https:\/\/athithya.site\/auth\/login",
 							"method": "GET",
-							"param": "content-security-policy",
+							"param": "Content-Security-Policy",
 							"attack": "",
-							"evidence": "default-src 'none'; script-src 'nonce-FiWy8dc87aLT8ukWIOnoq1' 'unsafe-eval' https://challenges.cloudflare.com; script-src-attr 'none'; style-src 'unsafe-inline'; img-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com blob:; child-src 'self' https://challenges.cloudflare.com blob:; worker-src blob:; form-action http: https:; base-uri 'self'",
-							"otherinfo": "The directive(s): form-action is/are among the directives that do not fallback to default-src."
+							"evidence": "default-src 'none'; script-src 'nonce-ZyltNeTx2683BmPr0eLMCA' 'unsafe-eval' https://challenges.cloudflare.com; script-src-attr 'none'; style-src 'unsafe-inline'; img-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com blob:; child-src 'self' https://challenges.cloudflare.com blob:; worker-src blob:; form-action http: https:; base-uri 'self'",
+							"otherinfo": "The directive(s): frame-ancestors, form-action is/are among the directives that do not fallback to default-src."
 						},
 						{
 							"id": "0",
@@ -119,18 +129,38 @@
 							"method": "GET",
 							"param": "Content-Security-Policy",
 							"attack": "",
-							"evidence": "default-src 'none'; script-src 'nonce-lCs5yqTZEDVwbCbBFySmYT' 'unsafe-eval' https://challenges.cloudflare.com; script-src-attr 'none'; style-src 'unsafe-inline'; img-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com blob:; child-src 'self' https://challenges.cloudflare.com blob:; worker-src blob:; form-action http: https:; base-uri 'self'",
+							"evidence": "default-src 'none'; script-src 'nonce-8kaQlXGboXA0sGXe0qrHK2' 'unsafe-eval' https://challenges.cloudflare.com; script-src-attr 'none'; style-src 'unsafe-inline'; img-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com blob:; child-src 'self' https://challenges.cloudflare.com blob:; worker-src blob:; form-action http: https:; base-uri 'self'",
+							"otherinfo": "The directive(s): frame-ancestors, form-action is/are among the directives that do not fallback to default-src."
+						},
+						{
+							"id": "76",
+							"uri": "https://athithya.site/auth/logout",
+							"nodeName": "https:\/\/athithya.site\/auth\/logout",
+							"method": "GET",
+							"param": "Content-Security-Policy",
+							"attack": "",
+							"evidence": "default-src 'none'; script-src 'nonce-4S3cC2v6h3tJOopCert0iz' 'unsafe-eval' https://challenges.cloudflare.com; script-src-attr 'none'; style-src 'unsafe-inline'; img-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com blob:; child-src 'self' https://challenges.cloudflare.com blob:; worker-src blob:; form-action http: https:; base-uri 'self'",
+							"otherinfo": "The directive(s): frame-ancestors, form-action is/are among the directives that do not fallback to default-src."
+						},
+						{
+							"id": "2",
+							"uri": "https://athithya.site/chat.html",
+							"nodeName": "https:\/\/athithya.site\/chat.html",
+							"method": "GET",
+							"param": "Content-Security-Policy",
+							"attack": "",
+							"evidence": "default-src 'none'; script-src 'nonce-mqXiJPDVlLU5NHC3yvxBAS' 'unsafe-eval' https://challenges.cloudflare.com; script-src-attr 'none'; style-src 'unsafe-inline'; img-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com blob:; child-src 'self' https://challenges.cloudflare.com blob:; worker-src blob:; form-action http: https:; base-uri 'self'",
 							"otherinfo": "The directive(s): frame-ancestors, form-action is/are among the directives that do not fallback to default-src."
 						}
 					],
-					"count": "2",
+					"count": "5",
 					"systemic": true,
 					"solution": "<p>Ensure that your web server, application server, load balancer, etc. is properly configured to set the Content-Security-Policy header.</p>",
-					"otherinfo": "<p>The directive(s): form-action is/are among the directives that do not fallback to default-src.</p>",
+					"otherinfo": "<p>The directive(s): frame-ancestors, form-action is/are among the directives that do not fallback to default-src.</p>",
 					"reference": "<p>https://www.w3.org/TR/CSP/</p><p>https://caniuse.com/#search=content+security+policy</p><p>https://content-security-policy.com/</p><p>https://github.com/HtmlUnit/htmlunit-csp</p><p>https://web.dev/articles/csp#resource-options</p>",
 					"cweid": "693",
 					"wascid": "15",
-					"sourceid": "4"
+					"sourceid": "1"
 				},
 				{
 					"pluginid": "10055",
@@ -143,43 +173,43 @@
 					"desc": "<p>Content Security Policy (CSP) is an added layer of security that helps to detect and mitigate certain types of attacks. Including (but not limited to) Cross Site Scripting (XSS), and data injection attacks. These attacks are used for everything from data theft to site defacement or distribution of malware. CSP provides a set of standard HTTP headers that allow website owners to declare approved sources of content that browsers should be allowed to load on that page \u2014 covered types are JavaScript, CSS, HTML frames, fonts, images and embeddable objects such as Java applets, ActiveX, audio and video files.</p>",
 					"instances":[ 
 						{
-							"id": "9",
+							"id": "10",
 							"uri": "https://athithya.site/",
 							"nodeName": "https:\/\/athithya.site\/",
 							"method": "GET",
 							"param": "Content-Security-Policy",
 							"attack": "",
-							"evidence": "default-src 'none'; script-src 'nonce-W8tAwUATfz8O5pH6Y65UEa' 'unsafe-eval' https://challenges.cloudflare.com; script-src-attr 'none'; style-src 'unsafe-inline'; img-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com blob:; child-src 'self' https://challenges.cloudflare.com blob:; worker-src blob:; form-action http: https:; base-uri 'self'",
+							"evidence": "default-src 'none'; script-src 'nonce-aBsHTD1Pvau4YggYmLormH' 'unsafe-eval' https://challenges.cloudflare.com; script-src-attr 'none'; style-src 'unsafe-inline'; img-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com blob:; child-src 'self' https://challenges.cloudflare.com blob:; worker-src blob:; form-action http: https:; base-uri 'self'",
 							"otherinfo": "script-src includes unsafe-eval."
 						},
 						{
-							"id": "11",
+							"id": "9",
 							"uri": "https://athithya.site/auth/login",
 							"nodeName": "https:\/\/athithya.site\/auth\/login",
 							"method": "GET",
 							"param": "Content-Security-Policy",
 							"attack": "",
-							"evidence": "default-src 'none'; script-src 'nonce-FiWy8dc87aLT8ukWIOnoq1' 'unsafe-eval' https://challenges.cloudflare.com; script-src-attr 'none'; style-src 'unsafe-inline'; img-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com blob:; child-src 'self' https://challenges.cloudflare.com blob:; worker-src blob:; form-action http: https:; base-uri 'self'",
+							"evidence": "default-src 'none'; script-src 'nonce-ZyltNeTx2683BmPr0eLMCA' 'unsafe-eval' https://challenges.cloudflare.com; script-src-attr 'none'; style-src 'unsafe-inline'; img-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com blob:; child-src 'self' https://challenges.cloudflare.com blob:; worker-src blob:; form-action http: https:; base-uri 'self'",
 							"otherinfo": "script-src includes unsafe-eval."
 						},
 						{
-							"id": "10",
+							"id": "13",
 							"uri": "https://athithya.site/auth/login/start/google",
 							"nodeName": "https:\/\/athithya.site\/auth\/login\/start\/google",
 							"method": "GET",
 							"param": "Content-Security-Policy",
 							"attack": "",
-							"evidence": "default-src 'none'; script-src 'nonce-lCs5yqTZEDVwbCbBFySmYT' 'unsafe-eval' https://challenges.cloudflare.com; script-src-attr 'none'; style-src 'unsafe-inline'; img-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com blob:; child-src 'self' https://challenges.cloudflare.com blob:; worker-src blob:; form-action http: https:; base-uri 'self'",
+							"evidence": "default-src 'none'; script-src 'nonce-8kaQlXGboXA0sGXe0qrHK2' 'unsafe-eval' https://challenges.cloudflare.com; script-src-attr 'none'; style-src 'unsafe-inline'; img-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com blob:; child-src 'self' https://challenges.cloudflare.com blob:; worker-src blob:; form-action http: https:; base-uri 'self'",
 							"otherinfo": "script-src includes unsafe-eval."
 						},
 						{
-							"id": "78",
+							"id": "81",
 							"uri": "https://athithya.site/auth/logout",
 							"nodeName": "https:\/\/athithya.site\/auth\/logout",
 							"method": "GET",
 							"param": "Content-Security-Policy",
 							"attack": "",
-							"evidence": "default-src 'none'; script-src 'nonce-L5ku6LktPorsyyzkHP1v9R' 'unsafe-eval' https://challenges.cloudflare.com; script-src-attr 'none'; style-src 'unsafe-inline'; img-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com blob:; child-src 'self' https://challenges.cloudflare.com blob:; worker-src blob:; form-action http: https:; base-uri 'self'",
+							"evidence": "default-src 'none'; script-src 'nonce-4S3cC2v6h3tJOopCert0iz' 'unsafe-eval' https://challenges.cloudflare.com; script-src-attr 'none'; style-src 'unsafe-inline'; img-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com blob:; child-src 'self' https://challenges.cloudflare.com blob:; worker-src blob:; form-action http: https:; base-uri 'self'",
 							"otherinfo": "script-src includes unsafe-eval."
 						},
 						{
@@ -189,7 +219,7 @@
 							"method": "GET",
 							"param": "Content-Security-Policy",
 							"attack": "",
-							"evidence": "default-src 'none'; script-src 'nonce-8kwOSiiNJAfFkAQz1Dj8m1' 'unsafe-eval' https://challenges.cloudflare.com; script-src-attr 'none'; style-src 'unsafe-inline'; img-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com blob:; child-src 'self' https://challenges.cloudflare.com blob:; worker-src blob:; form-action http: https:; base-uri 'self'",
+							"evidence": "default-src 'none'; script-src 'nonce-mqXiJPDVlLU5NHC3yvxBAS' 'unsafe-eval' https://challenges.cloudflare.com; script-src-attr 'none'; style-src 'unsafe-inline'; img-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com blob:; child-src 'self' https://challenges.cloudflare.com blob:; worker-src blob:; form-action http: https:; base-uri 'self'",
 							"otherinfo": "script-src includes unsafe-eval."
 						}
 					],
@@ -213,53 +243,53 @@
 					"desc": "<p>Content Security Policy (CSP) is an added layer of security that helps to detect and mitigate certain types of attacks. Including (but not limited to) Cross Site Scripting (XSS), and data injection attacks. These attacks are used for everything from data theft to site defacement or distribution of malware. CSP provides a set of standard HTTP headers that allow website owners to declare approved sources of content that browsers should be allowed to load on that page \u2014 covered types are JavaScript, CSS, HTML frames, fonts, images and embeddable objects such as Java applets, ActiveX, audio and video files.</p>",
 					"instances":[ 
 						{
-							"id": "4",
+							"id": "6",
 							"uri": "https://athithya.site/",
 							"nodeName": "https:\/\/athithya.site\/",
 							"method": "GET",
 							"param": "Content-Security-Policy",
 							"attack": "",
-							"evidence": "default-src 'none'; script-src 'nonce-W8tAwUATfz8O5pH6Y65UEa' 'unsafe-eval' https://challenges.cloudflare.com; script-src-attr 'none'; style-src 'unsafe-inline'; img-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com blob:; child-src 'self' https://challenges.cloudflare.com blob:; worker-src blob:; form-action http: https:; base-uri 'self'",
+							"evidence": "default-src 'none'; script-src 'nonce-aBsHTD1Pvau4YggYmLormH' 'unsafe-eval' https://challenges.cloudflare.com; script-src-attr 'none'; style-src 'unsafe-inline'; img-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com blob:; child-src 'self' https://challenges.cloudflare.com blob:; worker-src blob:; form-action http: https:; base-uri 'self'",
 							"otherinfo": "style-src includes unsafe-inline."
 						},
 						{
-							"id": "6",
+							"id": "5",
 							"uri": "https://athithya.site/auth/login",
 							"nodeName": "https:\/\/athithya.site\/auth\/login",
 							"method": "GET",
 							"param": "Content-Security-Policy",
 							"attack": "",
-							"evidence": "default-src 'none'; script-src 'nonce-FiWy8dc87aLT8ukWIOnoq1' 'unsafe-eval' https://challenges.cloudflare.com; script-src-attr 'none'; style-src 'unsafe-inline'; img-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com blob:; child-src 'self' https://challenges.cloudflare.com blob:; worker-src blob:; form-action http: https:; base-uri 'self'",
+							"evidence": "default-src 'none'; script-src 'nonce-ZyltNeTx2683BmPr0eLMCA' 'unsafe-eval' https://challenges.cloudflare.com; script-src-attr 'none'; style-src 'unsafe-inline'; img-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com blob:; child-src 'self' https://challenges.cloudflare.com blob:; worker-src blob:; form-action http: https:; base-uri 'self'",
 							"otherinfo": "style-src includes unsafe-inline."
 						},
 						{
-							"id": "5",
+							"id": "7",
 							"uri": "https://athithya.site/auth/login/start/google",
 							"nodeName": "https:\/\/athithya.site\/auth\/login\/start\/google",
 							"method": "GET",
 							"param": "Content-Security-Policy",
 							"attack": "",
-							"evidence": "default-src 'none'; script-src 'nonce-lCs5yqTZEDVwbCbBFySmYT' 'unsafe-eval' https://challenges.cloudflare.com; script-src-attr 'none'; style-src 'unsafe-inline'; img-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com blob:; child-src 'self' https://challenges.cloudflare.com blob:; worker-src blob:; form-action http: https:; base-uri 'self'",
+							"evidence": "default-src 'none'; script-src 'nonce-8kaQlXGboXA0sGXe0qrHK2' 'unsafe-eval' https://challenges.cloudflare.com; script-src-attr 'none'; style-src 'unsafe-inline'; img-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com blob:; child-src 'self' https://challenges.cloudflare.com blob:; worker-src blob:; form-action http: https:; base-uri 'self'",
 							"otherinfo": "style-src includes unsafe-inline."
 						},
 						{
-							"id": "77",
-							"uri": "https://athithya.site/auth/logout",
-							"nodeName": "https:\/\/athithya.site\/auth\/logout",
+							"id": "79",
+							"uri": "https://athithya.site/auth/me",
+							"nodeName": "https:\/\/athithya.site\/auth\/me",
 							"method": "GET",
 							"param": "Content-Security-Policy",
 							"attack": "",
-							"evidence": "default-src 'none'; script-src 'nonce-L5ku6LktPorsyyzkHP1v9R' 'unsafe-eval' https://challenges.cloudflare.com; script-src-attr 'none'; style-src 'unsafe-inline'; img-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com blob:; child-src 'self' https://challenges.cloudflare.com blob:; worker-src blob:; form-action http: https:; base-uri 'self'",
+							"evidence": "default-src 'none'; script-src 'nonce-H20DrMRcGl5r64cwui0uMV' 'unsafe-eval' https://challenges.cloudflare.com; script-src-attr 'none'; style-src 'unsafe-inline'; img-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com blob:; child-src 'self' https://challenges.cloudflare.com blob:; worker-src blob:; form-action http: https:; base-uri 'self'",
 							"otherinfo": "style-src includes unsafe-inline."
 						},
 						{
-							"id": "7",
+							"id": "4",
 							"uri": "https://athithya.site/chat.html",
 							"nodeName": "https:\/\/athithya.site\/chat.html",
 							"method": "GET",
 							"param": "Content-Security-Policy",
 							"attack": "",
-							"evidence": "default-src 'none'; script-src 'nonce-8kwOSiiNJAfFkAQz1Dj8m1' 'unsafe-eval' https://challenges.cloudflare.com; script-src-attr 'none'; style-src 'unsafe-inline'; img-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com blob:; child-src 'self' https://challenges.cloudflare.com blob:; worker-src blob:; form-action http: https:; base-uri 'self'",
+							"evidence": "default-src 'none'; script-src 'nonce-mqXiJPDVlLU5NHC3yvxBAS' 'unsafe-eval' https://challenges.cloudflare.com; script-src-attr 'none'; style-src 'unsafe-inline'; img-src 'self' https://challenges.cloudflare.com; connect-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com blob:; child-src 'self' https://challenges.cloudflare.com blob:; worker-src blob:; form-action http: https:; base-uri 'self'",
 							"otherinfo": "style-src includes unsafe-inline."
 						}
 					],
@@ -283,7 +313,7 @@
 					"desc": "<p>HTTP Strict Transport Security (HSTS) is a web security policy mechanism whereby a web server declares that complying user agents (such as a web browser) are to interact with it using only secure HTTPS connections (i.e. HTTP layered over TLS/SSL). HSTS is an IETF standards track protocol and is specified in RFC 6797.</p>",
 					"instances":[ 
 						{
-							"id": "46",
+							"id": "45",
 							"uri": "https://athithya.site/",
 							"nodeName": "https:\/\/athithya.site\/",
 							"method": "GET",
@@ -293,7 +323,7 @@
 							"otherinfo": ""
 						},
 						{
-							"id": "47",
+							"id": "44",
 							"uri": "https://athithya.site/auth/login",
 							"nodeName": "https:\/\/athithya.site\/auth\/login",
 							"method": "GET",
@@ -303,7 +333,7 @@
 							"otherinfo": ""
 						},
 						{
-							"id": "44",
+							"id": "47",
 							"uri": "https://athithya.site/auth/login/start/google",
 							"nodeName": "https:\/\/athithya.site\/auth\/login\/start\/google",
 							"method": "GET",
@@ -313,9 +343,9 @@
 							"otherinfo": ""
 						},
 						{
-							"id": "95",
-							"uri": "https://athithya.site/auth/logout",
-							"nodeName": "https:\/\/athithya.site\/auth\/logout",
+							"id": "97",
+							"uri": "https://athithya.site/auth/me",
+							"nodeName": "https:\/\/athithya.site\/auth\/me",
 							"method": "GET",
 							"param": "",
 							"attack": "",
@@ -323,7 +353,7 @@
 							"otherinfo": ""
 						},
 						{
-							"id": "45",
+							"id": "46",
 							"uri": "https://athithya.site/chat.html",
 							"nodeName": "https:\/\/athithya.site\/chat.html",
 							"method": "GET",
@@ -353,60 +383,60 @@
 					"desc": "<p>A timestamp was disclosed by the application/web server. - Unix</p>",
 					"instances":[ 
 						{
-							"id": "52",
+							"id": "48",
 							"uri": "https://athithya.site/",
 							"nodeName": "https:\/\/athithya.site\/",
 							"method": "GET",
 							"param": "",
 							"attack": "",
-							"evidence": "1780542175",
-							"otherinfo": "1780542175, which evaluates to: 2026-06-04 03:02:55."
+							"evidence": "1780544903",
+							"otherinfo": "1780544903, which evaluates to: 2026-06-04 03:48:23."
 						},
 						{
-							"id": "49",
+							"id": "51",
 							"uri": "https://athithya.site/auth/login",
 							"nodeName": "https:\/\/athithya.site\/auth\/login",
 							"method": "GET",
 							"param": "",
 							"attack": "",
-							"evidence": "1780542175",
-							"otherinfo": "1780542175, which evaluates to: 2026-06-04 03:02:55."
+							"evidence": "1780544903",
+							"otherinfo": "1780544903, which evaluates to: 2026-06-04 03:48:23."
 						},
 						{
-							"id": "53",
+							"id": "50",
 							"uri": "https://athithya.site/auth/login/start/google",
 							"nodeName": "https:\/\/athithya.site\/auth\/login\/start\/google",
 							"method": "GET",
 							"param": "",
 							"attack": "",
-							"evidence": "1780542175",
-							"otherinfo": "1780542175, which evaluates to: 2026-06-04 03:02:55."
+							"evidence": "1780544903",
+							"otherinfo": "1780544903, which evaluates to: 2026-06-04 03:48:23."
 						},
 						{
-							"id": "98",
-							"uri": "https://athithya.site/auth/logout",
-							"nodeName": "https:\/\/athithya.site\/auth\/logout",
+							"id": "99",
+							"uri": "https://athithya.site/auth/me",
+							"nodeName": "https:\/\/athithya.site\/auth\/me",
 							"method": "GET",
 							"param": "",
 							"attack": "",
-							"evidence": "1780542176",
-							"otherinfo": "1780542176, which evaluates to: 2026-06-04 03:02:56."
+							"evidence": "1780544904",
+							"otherinfo": "1780544904, which evaluates to: 2026-06-04 03:48:24."
 						},
 						{
-							"id": "48",
+							"id": "49",
 							"uri": "https://athithya.site/chat.html",
 							"nodeName": "https:\/\/athithya.site\/chat.html",
 							"method": "GET",
 							"param": "",
 							"attack": "",
-							"evidence": "1780542175",
-							"otherinfo": "1780542175, which evaluates to: 2026-06-04 03:02:55."
+							"evidence": "1780544903",
+							"otherinfo": "1780544903, which evaluates to: 2026-06-04 03:48:23."
 						}
 					],
 					"count": "5",
 					"systemic": true,
 					"solution": "<p>Manually confirm that the timestamp data is not sensitive, and that the data cannot be aggregated to disclose exploitable patterns.</p>",
-					"otherinfo": "<p>1780542175, which evaluates to: 2026-06-04 03:02:55.</p>",
+					"otherinfo": "<p>1780544903, which evaluates to: 2026-06-04 03:48:23.</p>",
 					"reference": "<p>https://cwe.mitre.org/data/definitions/200.html</p>",
 					"cweid": "497",
 					"wascid": "13",
@@ -423,7 +453,7 @@
 					"desc": "<p>The Anti-MIME-Sniffing header X-Content-Type-Options was not set to 'nosniff'. This allows older versions of Internet Explorer and Chrome to perform MIME-sniffing on the response body, potentially causing the response body to be interpreted and displayed as a content type other than the declared content type. Current (early 2014) and legacy versions of Firefox will use the declared content type (if one is set), rather than performing MIME-sniffing.</p>",
 					"instances":[ 
 						{
-							"id": "125",
+							"id": "116",
 							"uri": "https://athithya.site/.well-known/jwks.json",
 							"nodeName": "https:\/\/athithya.site\/.well-known\/jwks.json",
 							"method": "GET",
@@ -453,7 +483,7 @@
 					"desc": "<p>The message contained both CSP specified via header and via Meta tag. It was not possible to union these policies in order to perform an analysis. Therefore, they have been evaluated individually.</p>",
 					"instances":[ 
 						{
-							"id": "15",
+							"id": "12",
 							"uri": "https://athithya.site/",
 							"nodeName": "https:\/\/athithya.site\/",
 							"method": "GET",
@@ -463,7 +493,7 @@
 							"otherinfo": ""
 						},
 						{
-							"id": "16",
+							"id": "14",
 							"uri": "https://athithya.site/auth/login",
 							"nodeName": "https:\/\/athithya.site\/auth\/login",
 							"method": "GET",
@@ -473,7 +503,7 @@
 							"otherinfo": ""
 						},
 						{
-							"id": "12",
+							"id": "16",
 							"uri": "https://athithya.site/auth/login/start/google",
 							"nodeName": "https:\/\/athithya.site\/auth\/login\/start\/google",
 							"method": "GET",
@@ -483,7 +513,7 @@
 							"otherinfo": ""
 						},
 						{
-							"id": "79",
+							"id": "82",
 							"uri": "https://athithya.site/auth/logout",
 							"nodeName": "https:\/\/athithya.site\/auth\/logout",
 							"method": "GET",
@@ -493,7 +523,7 @@
 							"otherinfo": ""
 						},
 						{
-							"id": "13",
+							"id": "11",
 							"uri": "https://athithya.site/chat.html",
 							"nodeName": "https:\/\/athithya.site\/chat.html",
 							"method": "GET",
@@ -523,43 +553,43 @@
 					"desc": "<p>The application appears to be a modern web application. If you need to explore it automatically then the Ajax Spider may well be more effective than the standard one.</p>",
 					"instances":[ 
 						{
-							"id": "43",
+							"id": "42",
 							"uri": "https://athithya.site/",
 							"nodeName": "https:\/\/athithya.site\/",
 							"method": "GET",
 							"param": "",
 							"attack": "",
-							"evidence": "<script nonce=\"W8tAwUATfz8O5pH6Y65UEa\">(function(){window._cf_chl_opt = {cFPWv: 'g',cH: 'FebxSZzJUsNQmQluisFAxUpdU9cxymylPy3nrPCKqG0-1780542175-1.2.1.1-XAZUrp.WPK3lhpOztlWQvnP36VnbGXVioRHeMeB_luraN9u4.npfhiR2yn8Yl_1.',cITimeS: '1780542175',cN: 'W8tAwUATfz8O5pH6Y65UEa',cRay: 'a063b39339b30891',cTplB: '0',cTplC:0,cTplO:0,cTplV:5,cType: 'managed',cUPMDTk:\"/?__cf_chl_tk=Z605YavmapGIqbZxrYSTzkl2sDLRSIGsJCKZ8hERXjI-1780542175-1.0.1.1-soQQsZgiCeYzUGRLdWBwktq8Ss99oKVDyawBslR_dvc\",cvId: '3',cZone: 'athithya.site',fa:\"/?__cf_chl_f_tk=Z605YavmapGIqbZxrYSTzkl2sDLRSIGsJCKZ8hERXjI-1780542175-1.0.1.1-soQQsZgiCeYzUGRLdWBwktq8Ss99oKVDyawBslR_dvc\",md: 'R0KxfelZfk7aVsFItEd4a6JpOHQkOMs6DoNDs_KJHhA-1780542175-1.2.1.1-eNuNrPSd_Xdy4T8PFwzyUdvt1ho_kUAKafeVh8WDGi1OGmdjf94rVWZAm_wTu3F5j.RQbHh1aSCTHV4bcWQxIuFxZuV_ZOyJnoGblpw3V.naiRUAfCLz.Oiemmw6W3_0TYnIbiYK0mNld4CWiRct.F.4L.cGdWt4a0zdYLkbXN2gU8RCQ2sHrpC0E1pu3JFwrcKEHmY2DmTYJaPSI0cDhH4WS3.JD5seWWWkSHwUv3Lrzml1_BMxNV2PXsj199TmMg9Mhi49el70p6k7xINQynRPoEcpDBBTUJYETlf8qWiDLIavpYs_NmnOzhJXOr9BkL2GK7jGRcd5iU85WBr2nDpGsyRF5z3qKrcfFe.N4Cv28tQZ2WGKpGfB7wEz5of4MT1LKSoU4dlqYuYV2VBIWP8HGHzz1Fe.zGS7UiSeujsTi9JP7V0vF0ucUqizEtD_xY5q6upZx5GwW3cGreqz3gy0.ssSyAQX2VlH_2.N92Comk1IPXJc90DUWWO0SHfYVLpPrGrJgbQplfofAbCYOrsbA446dAYoRM3ARUU2fNaD7oQbEw5V0kRC6TY.5KGopwqmgh0fCV7isBLIZjIG4.mQw4Vvao8LzPxaVi4qGmnouUoMbVyf8kOhcrJRvvmPMf6zWRoFcRbup3x0sZccWqG6prc2ggEvp.mIfwMjQnM_EnmYCEJhQD9YNYq2iPd_QZpos9axotJtu1xrsbi4mQh0H1NfpCgaz3dLPml7aMgYc6wl7wHMCMgz60KXzL7Jm.OBdknKB_4RYiSCOQxVddPkt1ebGj0AtRa3NcQmpmSLAq0GIKJ06bZ9EBkfPCeyxPcg5RZ14AU6nIj.sfyhxUFIM5E5qn3zRXOCF0oE85F5iy5GtrYBeZxicLeCCjSSh16BXEiFJERBGuaJsucc42G97E4t0DuwZ_bUqXdvPfA',mdrd: 'jjAJqaWjkmd_sXtB6jzaD7jYDwv8ps4fAB60qU7dX8o-1780542175-1.2.1.1-r8pF0Va1QU1Bhp9zZt.yyM81z0YRmAwac4SeGwP6PTi5YgtuLvevm_Q10hNS8Sfn5j8l4AAQwHX9T.ywz61x1J30kPWJ4osulutTyeZagFUssBX9nT4VAatmTgd.ka7k9YAaQYtLRXJAoeqC__LHaFqgHcwbcATgjKwstA_aCtw',};var a = document.createElement('script');a.nonce = 'W8tAwUATfz8O5pH6Y65UEa';a.src = '/cdn-cgi/challenge-platform/h/g/orchestrate/chl_page/v1?ray=a063b39339b30891';window._cf_chl_opt.cOgUHash = location.hash === '' && location.href.indexOf('#') !== -1 ? '#' : location.hash;window._cf_chl_opt.cOgUQuery = location.search === '' && location.href.slice(0, location.href.length - window._cf_chl_opt.cOgUHash.length).indexOf('?') !== -1 ? '?' : location.search;if (window.history && window.history.replaceState) {var ogU = location.pathname + window._cf_chl_opt.cOgUQuery + window._cf_chl_opt.cOgUHash;history.replaceState(null, null,\"/?__cf_chl_rt_tk=Z605YavmapGIqbZxrYSTzkl2sDLRSIGsJCKZ8hERXjI-1780542175-1.0.1.1-soQQsZgiCeYzUGRLdWBwktq8Ss99oKVDyawBslR_dvc\"+ window._cf_chl_opt.cOgUHash);a.onload = function() {history.replaceState(null, null, ogU);}}document.getElementsByTagName('head')[0].appendChild(a);}());</script>",
+							"evidence": "<script nonce=\"aBsHTD1Pvau4YggYmLormH\">(function(){window._cf_chl_opt = {cFPWv: 'g',cH: 'C5GKJlgi3SNpylEgUtU3DYIrjZYNY8K7VkMv67AP3C8-1780544903-1.2.1.1-kHr2hr4H63kB1Uh5P7xzhHXwwJtviFczviNsG2U83JmD2YTvYJI5QwGQ4lSQKaUB',cITimeS: '1780544903',cN: 'aBsHTD1Pvau4YggYmLormH',cRay: 'a063f62dcd67241e',cTplB: '0',cTplC:0,cTplO:0,cTplV:5,cType: 'managed',cUPMDTk:\"/?__cf_chl_tk=1ADeAqvsifgTRQW4zD1i2PZeK4thVwVv5tZnhSQ0Sqs-1780544903-1.0.1.1-fLoxreOf1ccGbjUUMt1OzgF1v_XxHMUo2RZ.s5gM62o\",cvId: '3',cZone: 'athithya.site',fa:\"/?__cf_chl_f_tk=1ADeAqvsifgTRQW4zD1i2PZeK4thVwVv5tZnhSQ0Sqs-1780544903-1.0.1.1-fLoxreOf1ccGbjUUMt1OzgF1v_XxHMUo2RZ.s5gM62o\",md: 'tR9SNK9yHd1Oe3QLfz7CZJCqwA2_S.qqw_gG7CwNrcI-1780544903-1.2.1.1-N7jsT67tOjBcM8HjgyK4XrzFUZaBBfBEqGRgOc1danCezlRk0mVqTPxP.SS08b2.4Gx1Z4trUIxgkNjqt5S8ukxijaqJCpqIQe9mt1VtY3l.VLlYlTKRnPNF7eO4Zajn9D7as9EzRCVINhW.pXeV_wQN_E4_novfp5.GWQ11auSoiiXmMc5O.EJpBaFqFnGIAuLjbJelpjBTSrMd.xjXj3SIELAmK2BlFmRsOgdVKz.hj1tGwkjnBASFPy7s5FXOmJF8E7DtYp.mUhWzULMAChnpwmXuChxsGDf.RX.a6iqFLXsGLavNOt69VMABnAFi2HKRqSSKUlrhsWFkR0JjNbK7vAb4thameQ1vCv.LmH5Y10UuZWCnYv_fgtnkGseYpvjOhLfMayGNqmugl9eL_cEAltFAkHjvZuwbGCctd9Q_iKJ1DaRu8O_lkFX2kEY10JnY6AyIRLWplZjCxl2WmXYqPNv8jOfNEveHVGB5XiZdwAmj7mJQl0pfysAI2q9xv2aRIIBLI5MVEh4pfrkr1hYVzW4Nawo.JpQNpCE7e9EowGZcIRtnyeTSKU.X12emrI.Mb4GhIDwYCj42.mHxkB1T.mo5ycfCD5dnhqDbrd2wRv2zFu_1rBikVwUm7Pb7M.PA7DCANi46wDwf3EV_CgS8DdVRvrMzlbQdiT6ZbXBfigk74PwEqmvTOuAI6q3br9HtOUdjJTsP2Bx1ItJrMMrfEDKo6krgWiPLHMXWFUQP7hyhq6SimfRtvQBfca9p78A16ubkKcnWUfb2dHOEoEVy52NbAtDKflqMfzsBs9nPe5dBYdrgu9yDu.mY3ZN5Q_Dn1eKb9j3PjzA4ePmnZFKYDn2bCqRh4NfiR2Fb7V7pAdZGYQqG0WbLHiHtHTnqOPHHAIwSkFNFMqcNI9qP0dwnlBmM4P2PLDTcAOwe5Qo',mdrd: '_wcwieBVuIlUzWOwv.kpCaV1j_yOTIHO0EfQTEe6ZhA-1780544903-1.2.1.1-lSzv002wmGyIhvvfjAvemvj_mCZ53GSPcRu3T0Hoyr2Eg4K0VoMCNEj..QcHvQem.645LjUW5Xh52V7EsappNs_5znIOreP9GrnsPL34Ftyim_l.BNlouFe3c_OX6bEg890jwniEUlAQwKsMq25_ELdkY3c4AOyB3c.NAhZX6Cc',};var a = document.createElement('script');a.nonce = 'aBsHTD1Pvau4YggYmLormH';a.src = '/cdn-cgi/challenge-platform/h/g/orchestrate/chl_page/v1?ray=a063f62dcd67241e';window._cf_chl_opt.cOgUHash = location.hash === '' && location.href.indexOf('#') !== -1 ? '#' : location.hash;window._cf_chl_opt.cOgUQuery = location.search === '' && location.href.slice(0, location.href.length - window._cf_chl_opt.cOgUHash.length).indexOf('?') !== -1 ? '?' : location.search;if (window.history && window.history.replaceState) {var ogU = location.pathname + window._cf_chl_opt.cOgUQuery + window._cf_chl_opt.cOgUHash;history.replaceState(null, null,\"/?__cf_chl_rt_tk=1ADeAqvsifgTRQW4zD1i2PZeK4thVwVv5tZnhSQ0Sqs-1780544903-1.0.1.1-fLoxreOf1ccGbjUUMt1OzgF1v_XxHMUo2RZ.s5gM62o\"+ window._cf_chl_opt.cOgUHash);a.onload = function() {history.replaceState(null, null, ogU);}}document.getElementsByTagName('head')[0].appendChild(a);}());</script>",
 							"otherinfo": "No links have been found while there are scripts, which is an indication that this is a modern web application."
 						},
 						{
-							"id": "41",
+							"id": "43",
 							"uri": "https://athithya.site/auth/login",
 							"nodeName": "https:\/\/athithya.site\/auth\/login",
 							"method": "GET",
 							"param": "",
 							"attack": "",
-							"evidence": "<script nonce=\"FiWy8dc87aLT8ukWIOnoq1\">(function(){window._cf_chl_opt = {cFPWv: 'g',cH: 'zr5Nkr6HHAU5bQV5Bfaj7ZCuCn3a4OTFXAm.pvxa3Qg-1780542175-1.2.1.1-MZ.LS7HjOHT9lJn1sicesCSA97GOr_sboW4EEOCXKr1t.InCcuoLo7EnBj9DCbTg',cITimeS: '1780542175',cN: 'FiWy8dc87aLT8ukWIOnoq1',cRay: 'a063b395cb962d16',cTplB: '0',cTplC:0,cTplO:0,cTplV:5,cType: 'managed',cUPMDTk:\"/auth/login?__cf_chl_tk=3uJkFUwlwaMxaNeqrruu0I_hfBo0eN9VdujxWdFbwog-1780542175-1.0.1.1-Xt7wjubw9fI8uLcHtS8L4XOmaWXRpvhF1yriEjvV9Vo\",cvId: '3',cZone: 'athithya.site',fa:\"/auth/login?__cf_chl_f_tk=3uJkFUwlwaMxaNeqrruu0I_hfBo0eN9VdujxWdFbwog-1780542175-1.0.1.1-Xt7wjubw9fI8uLcHtS8L4XOmaWXRpvhF1yriEjvV9Vo\",md: 'gxaUoR_5HIP38yyS619Eaprv0DlC4tOgP.scynTCKeo-1780542175-1.2.1.1-lpXE53CyJeWB9aGU9.ysHeyFWKmAdkBNG6JVV5yOXVkRUdhLcKeGEoJIvtgIFkaxTGhCNIzPlBrvWPqED1vuc0m1kt8PXKUUZz6vrOufdt4HwnS66_ig1AQ3ufnejN.MtADXI4OlVX6feyFAUbUXap_vCTfG6EzvEp4NjcKeooxbZLkwaJKMsSzoOK1gxPw27AbbCQSjb2ZnFAlk5KXFD5q7fWrfu4Wof3Fw775wh1wnmOuu6xaACFx16GCTvNvgJXYfhjuvKyMylkllwGHtxPe6L6UX40Dv_a5Skuy2Jy5laM.ygF2OS6Zwu1VNSqxSmrYR3KttXzg.3HkfTHUjSjAor6Pgq_rqzm_RrLZLRYbF8Ci3IBXRqy7OgxmptRlcZjagYzv0Wi8P0JSSfvwv3OP08ETovL_i6V11EYz2v89A0HfwWGmAlQgAqJWHSk7d98HhycBlTprUjTAaFjaTbYxM5Da5EfFcowQTvm8izS4XGk1zX3uj90hPhR6OrKXlkQUHDycdKfoQvjwnghmnY4HIBgdDQSf24tUFE8H2dSZEXAmWMH63PWs6gxJJgIbmee_DNKWrH8mAoux3r7EOlh7pnAr1JSksj7s51NcXsMEx6NkSVeFTLeSn9SEGp6OowaHm57L3xvsKa_tncJxvQgoDQrcKQfqApF2ly8ov1GErVNZtCbOfGSFNKpWZatoxNNCgr0kni9W20_zWrQKuWvp_jX_8y5zGnX0HbkiKc7Tn.GRu9ltp7OQSo.q4dbOvUeZhadDxYcc1VcQ2nCA8vCDBhdYtLp.n8W8lF.vpdUnAfdq8tcRL19_brnooco5q6F5Fv91_KVwPQ0rsBFyhffSx1PYWXhsINTctbHKaTLpYCAufuvQk3LtFBuPygfmSHh.U5KlurOC68O9m1zmJ1idGgH4.67C87nRMKBhVtd051kkmoUvntTYOMEyUGV7X',mdrd: 'fpkbJu4vBiATnHbJDfpn0XeqGyCqsdjmcLTnyinkGqs-1780542175-1.2.1.1-PQOhQQkkCnjODqK5DQZxhGHDhbnSwygfPkaF3ZjINktOqekuJI3.zb14lv3By.UY3bm_Bq1Qil7LSl1Y4uNGptYQoz9h5Agt1u6DSIK9Pc6m.BSqelzjbXjCXuiHkUJzCafsWBmVjxntgT8NG.3WTiOBwGo7sLVS6nBhOwul4xk',};var a = document.createElement('script');a.nonce = 'FiWy8dc87aLT8ukWIOnoq1';a.src = '/cdn-cgi/challenge-platform/h/g/orchestrate/chl_page/v1?ray=a063b395cb962d16';window._cf_chl_opt.cOgUHash = location.hash === '' && location.href.indexOf('#') !== -1 ? '#' : location.hash;window._cf_chl_opt.cOgUQuery = location.search === '' && location.href.slice(0, location.href.length - window._cf_chl_opt.cOgUHash.length).indexOf('?') !== -1 ? '?' : location.search;if (window.history && window.history.replaceState) {var ogU = location.pathname + window._cf_chl_opt.cOgUQuery + window._cf_chl_opt.cOgUHash;history.replaceState(null, null,\"/auth/login?__cf_chl_rt_tk=3uJkFUwlwaMxaNeqrruu0I_hfBo0eN9VdujxWdFbwog-1780542175-1.0.1.1-Xt7wjubw9fI8uLcHtS8L4XOmaWXRpvhF1yriEjvV9Vo\"+ window._cf_chl_opt.cOgUHash);a.onload = function() {history.replaceState(null, null, ogU);}}document.getElementsByTagName('head')[0].appendChild(a);}());</script>",
+							"evidence": "<script nonce=\"ZyltNeTx2683BmPr0eLMCA\">(function(){window._cf_chl_opt = {cFPWv: 'g',cH: 'TtBd6oqGj_AUpekBg3spvAGzIoeLEMVPKxf8USzuyh4-1780544903-1.2.1.1-PiWh7DlbB_FXYQ9BpeTD8ww3diGW9vE5J0Vn4Q07BOoWtmJqyXmr4xXQPw_Vix.Q',cITimeS: '1780544903',cN: 'ZyltNeTx2683BmPr0eLMCA',cRay: 'a063f63039a51e2d',cTplB: '0',cTplC:0,cTplO:0,cTplV:5,cType: 'managed',cUPMDTk:\"/auth/login?__cf_chl_tk=gDyQo1.Dfx2uKOB_Yi4mnu6nNq3tnLAzykXnNOIuz50-1780544903-1.0.1.1-_iUz901vsT9FtXuSXEn_GWVJAA4KIgrqr5Q26.YktYE\",cvId: '3',cZone: 'athithya.site',fa:\"/auth/login?__cf_chl_f_tk=gDyQo1.Dfx2uKOB_Yi4mnu6nNq3tnLAzykXnNOIuz50-1780544903-1.0.1.1-_iUz901vsT9FtXuSXEn_GWVJAA4KIgrqr5Q26.YktYE\",md: 'K6I6qMHD7dIQ0TYl8_h8.vsd9UH4OPwDdh1Q.E61ojA-1780544903-1.2.1.1-KEe0GJonu9nKMr1LarP5LvvwLO3APg6FUGmSty_4yrq2mCJb442D6gsQRhYFlT0bp8wLe8olNEFUSRfuh4B.KjX0P67yd61rSyEWv2ul7LfpLIhMpuSljUEigHxGVsRtY0s02g47JSd9LIZHI5S35sIkoafjw3acmwekO2BRLRGHzv73e9q.MHxYJeT4l7VhHm3TZEnQsThTdNUeVkH4C7XUWHrrWNaf1CmLIvDD_tf7l4tE4DocQyHmzmJzfAD0cl5AWfMdxOrQgRSXggR6l7QD.tAQ6yu3CfAFqB_YTgBLG_S9lMCbsMg0F3ufOiJzU080Sb4p3CqoFCrBuJxDgHvftSGGKnRNmssucehaPYHYmPnBNzkwYuwB9UEJaN_l.Uc7bglcBCos0EI_aAvSQXdqGpqafligybsSAzPFGpGtQRc7w.290OKIlKCdgmL0ih7IuF4cqqj3RjRUv77fubJvorTdDBFF2oAzetVNpqRh_VUsIpaQfuaL4N2pBTU8EVU.WBqH3t7Y5uLGZ1q1a.54gqstXTgsYUPV1qaItBnSqafaMcL0cvRlEvYznza66y4sqOB.BRDmbuikVxcZQuJRr2tiJwWksLZyJ2kuBX7r8ZsyNJVMpT2q5qwcIStvHIqpXEVpt4uaLvYJbEmfarGC7BfGY.SMJZ55yOABpj5DDJN5avUJZ53B616yhl5EAY_qUA2ZyuWnoRIwzO0LdxpQiyFHtuiNfXIWF67E0Oh_zF15lCBXdeXi8iR155HNdehOqgGxN9kl.DkpzE5lUw8niySxUMLze952ylh2da1QYMcPQxN7LTkMyT2LA5xBVZtR5mseBte9pI9RBdHn1khwEXHbMlxdO0xlDpgrTtN6mke6smBLJuxloDM8v8sXYFnkQYJyjvz8ihgcXTrSkWAJyCylwVtzctD_rEV2WmFYx14cPOGmzgcGQM8Z.Jcf',mdrd: 'fWtMyHCoH2ChBarzpdPQAp_TtAS3HWoVZKC1hA8uWDw-1780544903-1.2.1.1-ZbIRdEGGgEh2rIeMfqK.d6MeyidFrqj4mM22BGtDHfnL.8U3FOjkiZJzhxdpygKbfpr8Rnh_uC4jMyN225eNdgnPb6AwegX_f4Tr9Af3lyR6FzyWH3gx99e6Cmr1_BKdpCYfq_4dsHA9djFDkZIkchTomkFGkHJN1xf6Xewc5FA',};var a = document.createElement('script');a.nonce = 'ZyltNeTx2683BmPr0eLMCA';a.src = '/cdn-cgi/challenge-platform/h/g/orchestrate/chl_page/v1?ray=a063f63039a51e2d';window._cf_chl_opt.cOgUHash = location.hash === '' && location.href.indexOf('#') !== -1 ? '#' : location.hash;window._cf_chl_opt.cOgUQuery = location.search === '' && location.href.slice(0, location.href.length - window._cf_chl_opt.cOgUHash.length).indexOf('?') !== -1 ? '?' : location.search;if (window.history && window.history.replaceState) {var ogU = location.pathname + window._cf_chl_opt.cOgUQuery + window._cf_chl_opt.cOgUHash;history.replaceState(null, null,\"/auth/login?__cf_chl_rt_tk=gDyQo1.Dfx2uKOB_Yi4mnu6nNq3tnLAzykXnNOIuz50-1780544903-1.0.1.1-_iUz901vsT9FtXuSXEn_GWVJAA4KIgrqr5Q26.YktYE\"+ window._cf_chl_opt.cOgUHash);a.onload = function() {history.replaceState(null, null, ogU);}}document.getElementsByTagName('head')[0].appendChild(a);}());</script>",
 							"otherinfo": "No links have been found while there are scripts, which is an indication that this is a modern web application."
 						},
 						{
-							"id": "42",
+							"id": "41",
 							"uri": "https://athithya.site/auth/login/start/google",
 							"nodeName": "https:\/\/athithya.site\/auth\/login\/start\/google",
 							"method": "GET",
 							"param": "",
 							"attack": "",
-							"evidence": "<script nonce=\"lCs5yqTZEDVwbCbBFySmYT\">(function(){window._cf_chl_opt = {cFPWv: 'g',cH: 'FipolN5YfijjbBiKUARqOn7mc4N4VQ6XAhBU2tcCReI-1780542175-1.2.1.1-KBMlGaugxiBJdf5NPLUCPmwrfi.E1GnVAzyj9UgQ38kZChSQ_Y3X_TCsFSIKB6.G',cITimeS: '1780542175',cN: 'lCs5yqTZEDVwbCbBFySmYT',cRay: 'a063b396ec611b59',cTplB: '0',cTplC:0,cTplO:0,cTplV:5,cType: 'managed',cUPMDTk:\"/auth/login/start/google?__cf_chl_tk=0m.rQ5xtuAaogchMr3F4_YmM_awa8K0gfMUJr.GZkTM-1780542175-1.0.1.1-6awMYfFkL4ZYNUv_Aqokv8O4tQTsOHisAVnfX4S1AoI\",cvId: '3',cZone: 'athithya.site',fa:\"/auth/login/start/google?__cf_chl_f_tk=0m.rQ5xtuAaogchMr3F4_YmM_awa8K0gfMUJr.GZkTM-1780542175-1.0.1.1-6awMYfFkL4ZYNUv_Aqokv8O4tQTsOHisAVnfX4S1AoI\",md: '4iQa9sUzV.mYhpZ63Q.roNH77mRmTMDEdcgfCA8G7fg-1780542175-1.2.1.1-2M3iP8dylZhhKxvFq9NYH1eoyiI49BgFXAiO4IOPoGCoyu3zSkhxD5lKfVvSq4MVKQye4zCHrfE0IBlTepvRw5I5hob0_kx1UdWDfx7et5cX30F.z7gK0MxmysYERYZbDygxRiBlx6QFL9mngFT8ai2g_m1oNNvhEYy41c.fKAXi0052q34R7uv_iSl49XtzBucEGJX392x3wR8ScWl.Fh0hZpGP8AedoXOBoRLz4ozoMGodcEPAQNCTjVNvilIAFdAPRWOpw2O.rtaSXiSII4J9H.keXDfKZxwH460ZGLUno_NeWnpTYHDGBl_nkxexrnaFHqx4jGceDfP44lMJdjNtoWYBotCkV3Px77mRbXpUHW2p4Y06gQrA7JfeadXTeLELu7KKLLHoyUV_42E0Q5mpGMMVWFx1wRNvMa6u_Z0zu6uFfjKRd2cVFtkQVTbLLXJaqTtrWVOeOtW4nADe8jjqawSOIzDo9Aukvoru7ihbf7FzIp7mTO_mxEitAGIgCUrA9A.73.aCMG9leDOcARIGHm1TbC.7n9sAIqksa5p2TKx57CLHOHHIQnBU8xNfUlls7DciR7f5c4qvCCdK6_GJnSA7kPQCRM99SKP3jWcUImQBN_RrlILiRMmtiwuIv80WlmuBzS6u7LkBiZZFiL6m.qgbSa2EVyoOOY8OMsfzDHJ6mWIN8A90_zQeMdATqMFnnbQWEkUJgILLByAIkj_tIwvYJ7sEQocDOymzDaMbNgvPJ.tWXZm8mVwEdiAtt98aOeKFJsSBF19_6b7YLVLmHavnyPLMav2C_HP.W97KJOMKlVOC4HNuyWjezFXkjcjnEHuYW18dCVVwKHIBfABs9SNmqW6ecRccbR5VNo0FvptfiwtRhPxFGzJDVjVd.EzlTcrpd1NnwOVItn__JxO7gzqY_QxyxSj089zKUfpj.a5ZufxHJZ6u.b6gp4CH67xlF3Wom_PzL3Sy.BZTjQ',mdrd: 'SFLjfm_M9DBTYKiob4a6AMdYbRHOTQl_h1zeTTgvJeI-1780542175-1.2.1.1-NGF0XklqHruUtDS9oaE4dWbaxUEX6WWuLWajSsCuR5XmFX90HSR6fMcHMs3aLrbVxygCoyLwnwimTdOUB2cqpvWSoXtIJsXZkK2URn3toxpvSI9EAxSVaQf2z4oTp1JeKGx7.RJwEb2hk6GZ.SNeNBypn.tYyzrvpweAlX0Ugvk',};var a = document.createElement('script');a.nonce = 'lCs5yqTZEDVwbCbBFySmYT';a.src = '/cdn-cgi/challenge-platform/h/g/orchestrate/chl_page/v1?ray=a063b396ec611b59';window._cf_chl_opt.cOgUHash = location.hash === '' && location.href.indexOf('#') !== -1 ? '#' : location.hash;window._cf_chl_opt.cOgUQuery = location.search === '' && location.href.slice(0, location.href.length - window._cf_chl_opt.cOgUHash.length).indexOf('?') !== -1 ? '?' : location.search;if (window.history && window.history.replaceState) {var ogU = location.pathname + window._cf_chl_opt.cOgUQuery + window._cf_chl_opt.cOgUHash;history.replaceState(null, null,\"/auth/login/start/google?__cf_chl_rt_tk=0m.rQ5xtuAaogchMr3F4_YmM_awa8K0gfMUJr.GZkTM-1780542175-1.0.1.1-6awMYfFkL4ZYNUv_Aqokv8O4tQTsOHisAVnfX4S1AoI\"+ window._cf_chl_opt.cOgUHash);a.onload = function() {history.replaceState(null, null, ogU);}}document.getElementsByTagName('head')[0].appendChild(a);}());</script>",
+							"evidence": "<script nonce=\"8kaQlXGboXA0sGXe0qrHK2\">(function(){window._cf_chl_opt = {cFPWv: 'g',cH: 'Z2JNnl1BGtuQJR7j4U_8b270SHDl8Mf55VGIXUqP13M-1780544903-1.2.1.1-XRQCx.cPZcsjgK4pOimz5zOi_qZH2hJiemShBYQlUTgOsTjqihUHTx8eA.UhcQA.',cITimeS: '1780544903',cN: '8kaQlXGboXA0sGXe0qrHK2',cRay: 'a063f6314a0eb49c',cTplB: '0',cTplC:0,cTplO:0,cTplV:5,cType: 'managed',cUPMDTk:\"/auth/login/start/google?__cf_chl_tk=Z7xfS1Hf1fh2gGhi2ed99Q.dPG14h_.DK5eA7J.HqOM-1780544903-1.0.1.1-0yEJlklbHRYFagB6B88jKf1ky9KgNmhPn3P0TK95MOc\",cvId: '3',cZone: 'athithya.site',fa:\"/auth/login/start/google?__cf_chl_f_tk=Z7xfS1Hf1fh2gGhi2ed99Q.dPG14h_.DK5eA7J.HqOM-1780544903-1.0.1.1-0yEJlklbHRYFagB6B88jKf1ky9KgNmhPn3P0TK95MOc\",md: 'R_1YifIcbGEHJUx004DfZaU5eiyJnNXfg1ZKEI5ijIg-1780544903-1.2.1.1-odU0mUhFPGLPfgglwyW0e7gvnIVc2rMC7GH.krsBSo1OIZYHoaUgdMsnpRYfZgMYy_5mWk6n7Odjxxs8B0r0pW6imFk7dEVCJG1DlX1ZBzs24t7CqxDdNvwKlQTuk4EY52CJMzfBFGixozkRDGzK3fSa0At776RsBd2YKv4NRYmsl_GygnHj4Xs23JRQ8U14ZOwli3w_nzieiRBhAYe6FJdsWZdJgxH24l00ZcqqGrLVAnNhPLNGQVcs2meZmvUyfsxrj5Zqdvz4uBhP5Q1A58udcfzik.8eSRBLg9ImypijPkeQKU5i6mXG0CepgycLyCb2orrdl7PpPMWoRT6kRH_KcxPk18u9eVcBmEA.8kWKyz.XImOaR5llrlisAowW4MuUhj8JU3ira6Q9TbUBDzq7fcf9Ui2bjonNT.iuyCyDd175imy2pbmoRCZzR7LlIWCLnZ7IZAtkpOW7KokZxx4UPIQzPYfWD9iPAin73VH1L_utaGRWFSwQJFYrpMhVzphC_sswqA6aleKJiDglNNy0PWgThDWZ2iBiwTP2A_XbpH6mYXrvrp8qMQXplP8QfURcl76Yy9OzzJNyvbBvm9VeCXaWFvyy8mkbekwFo9v6ZtEJau4uZcQ2jIw5FOKMCgs3wNKzf4W5hgLII0hwa7TCrYLr5O6HpweoQ7wrfCEXvLB6DTJtdQd.feFr8d_ZuH7M_FrS_7XD7mLlbj59OCk4oDlNr7.e6Nlx._F7yF_gzhC9sRkWHjwpImqLYmz_CsHpIk2kAb9f2UuK_IoVNv1InusjmK4Ee3g28fEhraKAKttpZEvzXL6nhsisSKn7vyhg8P.7Tb194PPKXcHIcQvkb512xCL7ftRU1u_R4nA0_zrBFyKDe2B1atX_ATnP2num4lOOVSGKBvgQTWN0zHUXhp1FGha4ct1Db_YiKJF3cMcKJUuxqXTypIJG0O.M',mdrd: 'OpXoFv3Hgp3bbm8nHkUSD8Cqw1bqufaR2ctskT1qFWs-1780544903-1.2.1.1-EZFdva_8OmBbMs_NHkZo4vdsZSy0E2azqcVUtx1c3SIgPiXYG5R1IqQMwgQ2PWXaOpVlcZdajAg2rtMeczpKHsERU5DFrevfY7GbGhBrgICU0QbYbEdGbCNsOeC76e0_37Bis7wbTMGSJBKUy.jp0dq0xQrBlz_y94ICFUTBgSA',};var a = document.createElement('script');a.nonce = '8kaQlXGboXA0sGXe0qrHK2';a.src = '/cdn-cgi/challenge-platform/h/g/orchestrate/chl_page/v1?ray=a063f6314a0eb49c';window._cf_chl_opt.cOgUHash = location.hash === '' && location.href.indexOf('#') !== -1 ? '#' : location.hash;window._cf_chl_opt.cOgUQuery = location.search === '' && location.href.slice(0, location.href.length - window._cf_chl_opt.cOgUHash.length).indexOf('?') !== -1 ? '?' : location.search;if (window.history && window.history.replaceState) {var ogU = location.pathname + window._cf_chl_opt.cOgUQuery + window._cf_chl_opt.cOgUHash;history.replaceState(null, null,\"/auth/login/start/google?__cf_chl_rt_tk=Z7xfS1Hf1fh2gGhi2ed99Q.dPG14h_.DK5eA7J.HqOM-1780544903-1.0.1.1-0yEJlklbHRYFagB6B88jKf1ky9KgNmhPn3P0TK95MOc\"+ window._cf_chl_opt.cOgUHash);a.onload = function() {history.replaceState(null, null, ogU);}}document.getElementsByTagName('head')[0].appendChild(a);}());</script>",
 							"otherinfo": "No links have been found while there are scripts, which is an indication that this is a modern web application."
 						},
 						{
-							"id": "89",
-							"uri": "https://athithya.site/auth/logout",
-							"nodeName": "https:\/\/athithya.site\/auth\/logout",
+							"id": "96",
+							"uri": "https://athithya.site/auth/me",
+							"nodeName": "https:\/\/athithya.site\/auth\/me",
 							"method": "GET",
 							"param": "",
 							"attack": "",
-							"evidence": "<script nonce=\"L5ku6LktPorsyyzkHP1v9R\">(function(){window._cf_chl_opt = {cFPWv: 'g',cH: 'TLzosrSMrvUkkWOPWjDEgHDj6A2oB2jSAoOJAyepTG8-1780542176-1.2.1.1-T_64qP6onG_1fWVVwrk5OkB8G2n.kUaneYxYcu.07PYRgcLCiStIe3WTPRgGIWEb',cITimeS: '1780542176',cN: 'L5ku6LktPorsyyzkHP1v9R',cRay: 'a063b3981eb68242',cTplB: '0',cTplC:0,cTplO:0,cTplV:5,cType: 'managed',cUPMDTk:\"/auth/logout?__cf_chl_tk=.prcz5ux43_WdZOBVTo3uO2twbZklF9xwtDRnvoo.GE-1780542176-1.0.1.1-RE3TH6RIa8sdiwPAJbNRwHrGKPeRMi0OFSoQ3qIpDVs\",cvId: '3',cZone: 'athithya.site',fa:\"/auth/logout?__cf_chl_f_tk=.prcz5ux43_WdZOBVTo3uO2twbZklF9xwtDRnvoo.GE-1780542176-1.0.1.1-RE3TH6RIa8sdiwPAJbNRwHrGKPeRMi0OFSoQ3qIpDVs\",md: 'mHuBUIHF3QY8VJ9QEMaiT0bkGm5bEDtHljWJkc1k6qE-1780542176-1.2.1.1-RRhAg5EvdpywV0_5wlJ9lSYk5HRlzuvdrKsEJdGpkUCs0v8wQsbD_bmANgE3dPMuxm9UcsR9ypCeDA7dE1aU84UdxFTeZPpDOmax4jINGUDMN.g7Sh51u02tocQaRyLmjt1H3bgsJpyHSz1DFuuh5jx2GDJDkVJ3HZ4eanvYuF1NRQX9NWy0pMxmX6NKD8jdmpsHw4QCL0ZoZL3JIFWbgDVfBSTaxF4KvhFcesKQVxczPD8Ivu7ahq7hbfQeo_yYuSxCpvMrZi2fewEIEDA6giy0.xJ9Os8W3Ls20kERKA7bwQTUWp2BB9cPzvExdbMwE.X42b_lPFvmslh3S.nY_foj_x0XEQMNQpZf0QyDAjTKa_qK.9jU4TZNcG5PWOVFuMxKmEUd_eQyOiEODBdr6wGQDzIMQJkjPdjyDk.QXg9kvANQWwXGwnRyeNGdSvYyYH88XYa1Jx7A.Op8NgIhLZqFZtPgG3r2dLktaNBG2RUMF1lvaqpeg1y9cWA5C_ExZU9vdN302sl55qoEQrSAGVuIkhtzuD9d2cysjIDMr872ntE7dh1EvXPVGU6OGi4D90wTwSCnxXwtLDI_4xa7z0XXhMWm93HTmofbnz8Wk7feanZIod2pPoxX.A._e8n73X7vjuPeJCnQH2Z5AsR4W1_YoddDaLLAwxismN6v4htYjNFJnt3KO._2orpGEXqobVSnHbEF6ePA60AkaUS._kRwE.zbQdFw70yAwF2lxS8VvoOoIQi1ntzmzgtJr7twPQfTvIroAULq4.e8gqthzcLS65rXXQKenTX3Lb1SknSkG8PfJsM5W2Nusjf8D0hsT4J0r_YuBlL1qPfZhCwSPHb1Vutu2141IODVo4iaGlIZcbbhB6KOPi0IVfiMdXYhzxMUJ.7px8rATV4TIoHepN9mteCL7gLKK8Qv7bW2ob8f61Kvf.e83OBc_Htf_NPh',mdrd: 'O8Q02e2XIwzRoDvv7qzIK1MsOUDG62UCzXmdWNmaPJE-1780542176-1.2.1.1-kzqjlscCURBNjJjjeL5BnFJbyqAbP3XQ3Wfr1POjpEGs6xrCqgE4rNKtbpsNkVxWUqNh4MZBBImpicuS.3MfZwV53conIRjdEpzSWyd4fzeR1kJNPTU84QQ30OMQHx01EJ5eQWi8NVgVY1XSUGZO_eZky9cYFJEJCKJIUhpxakM',};var a = document.createElement('script');a.nonce = 'L5ku6LktPorsyyzkHP1v9R';a.src = '/cdn-cgi/challenge-platform/h/g/orchestrate/chl_page/v1?ray=a063b3981eb68242';window._cf_chl_opt.cOgUHash = location.hash === '' && location.href.indexOf('#') !== -1 ? '#' : location.hash;window._cf_chl_opt.cOgUQuery = location.search === '' && location.href.slice(0, location.href.length - window._cf_chl_opt.cOgUHash.length).indexOf('?') !== -1 ? '?' : location.search;if (window.history && window.history.replaceState) {var ogU = location.pathname + window._cf_chl_opt.cOgUQuery + window._cf_chl_opt.cOgUHash;history.replaceState(null, null,\"/auth/logout?__cf_chl_rt_tk=.prcz5ux43_WdZOBVTo3uO2twbZklF9xwtDRnvoo.GE-1780542176-1.0.1.1-RE3TH6RIa8sdiwPAJbNRwHrGKPeRMi0OFSoQ3qIpDVs\"+ window._cf_chl_opt.cOgUHash);a.onload = function() {history.replaceState(null, null, ogU);}}document.getElementsByTagName('head')[0].appendChild(a);}());</script>",
+							"evidence": "<script nonce=\"H20DrMRcGl5r64cwui0uMV\">(function(){window._cf_chl_opt = {cFPWv: 'g',cH: 'uV.k6EXxWjAQr7wREOF0QfhsLoHj2_LOPbLarcRvdyY-1780544904-1.2.1.1-QlwFIbPSGiDYHieWCexWG3NkUGinW.SPBe7AtBV5CKgrWg9mOjYXcCZZaBMnsgOJ',cITimeS: '1780544904',cN: 'H20DrMRcGl5r64cwui0uMV',cRay: 'a063f6336c425414',cTplB: '0',cTplC:0,cTplO:0,cTplV:5,cType: 'managed',cUPMDTk:\"/auth/me?__cf_chl_tk=7wsYOVL3FHOfa6FRJEyx3zUSKuVHPG35YBIAruiw1DQ-1780544904-1.0.1.1-CKL5_US3Pj1LaPSvAz9rDalLazKtyyqGItfHfZ9ZGG4\",cvId: '3',cZone: 'athithya.site',fa:\"/auth/me?__cf_chl_f_tk=7wsYOVL3FHOfa6FRJEyx3zUSKuVHPG35YBIAruiw1DQ-1780544904-1.0.1.1-CKL5_US3Pj1LaPSvAz9rDalLazKtyyqGItfHfZ9ZGG4\",md: 'XYsqOcF44KLg5BglZSwVdPjWbm8pJIYTvLvws92dh4o-1780544904-1.2.1.1-YtMO6iAp9Lyn8sRFL51luJynuURU.bh7NMS_qs8k8aGxfuKtZT8ANsRb0li094KcvZlcQ5Gx97btrukJGF6bhBf9MsMIC.iNfpk.MwqmEjjjtLMMliXSGDiy8mbuqI2_gIokX.sTB.hFwExKbk18wqQDIqy2zsG08jF9SEuFf.Qh0JYr2PCkbNGLqa9SPy46xbrDkjlv.oeNK0NNZ8EaUdpltViJRepqRCRvtj4iavLmAU56rf5tYeSB3ZtnVnXn5MVlFiJekZ2Zmv3z0sTk3F78u2HbauV7cM5AmfkrSPhJ5GdkqT7CYR5XO_XGIsi1mz8YIPjaqrRDPru.L0BnIL5OU.5_S8.vs4aSHN5zJlQ.UBNgijYqYkEFYntfgNsk9_fRsi3E1VzqYmu3LIQVmUIyOsSnMd0ph4i7M.ACJInVsRZ7ChzSjBeBwXb6W7wBlDrb_DvqGRZxm4eurC3fXiWZOLlRBgRV4mcHuq6bYgdhNhtX3p1hlLe4_BloFusWwTcDj_EwuIi4CkXsb6cbRExFcsZjejEJqwItJWvbzlmOGuV_AeeKPiwlFiIaETHihCXnYB3v7X5jzPFJHKqLGDEirr3YQKKS5J3WQ23qr3sqQniy4yRBs537.Q.OBQbzuFlgJ4C0Z8Uhvlp7OnG0vqKf_5y2wQ.hvFpQGiAl4XgdomuxJfpjpFK.78WTZIEITsfQ57EHMi4DGrMQyy5FLQXAfJSJ2rcJ1w_pcOzEwKWbHFf.M74tlFsVU61Eu_1I01Am3DpmK3biCfJ5QSGFk3jjPbbl.5iBv5sA488K0E4ALbvGdRPOUPS.kywSwyp_wZ9nHDoOSD6zxI05PNQrY4AZZjHaZX78UA1n0FgJGgc.G8MaFddDr5_.kHiTWP9hP4X608DiZ1YBwKw_7gYirS.DBlSO_xwh.7wVe2EhNfQ',mdrd: 'uGMrg4kmKZpjqurvsrYEDj6P61gME3sA3QwRm6qSJck-1780544904-1.2.1.1-2iqkbTOj50sQkFL1kmDjgUPKM4GevBciLkWLQMyo1Jn3_4SzIOQWNk5Ac2Qgw8HNFmDSfw3LfvbBvWkgZYHiIkJkpsLpTVn6RFCH.ed15hS62Up7GvMWlaWbm.Nl6jNByZxbLn99QVFg1Jh.7caTnUt4JkpbyrSSVKa9Jn_k.mA',};var a = document.createElement('script');a.nonce = 'H20DrMRcGl5r64cwui0uMV';a.src = '/cdn-cgi/challenge-platform/h/g/orchestrate/chl_page/v1?ray=a063f6336c425414';window._cf_chl_opt.cOgUHash = location.hash === '' && location.href.indexOf('#') !== -1 ? '#' : location.hash;window._cf_chl_opt.cOgUQuery = location.search === '' && location.href.slice(0, location.href.length - window._cf_chl_opt.cOgUHash.length).indexOf('?') !== -1 ? '?' : location.search;if (window.history && window.history.replaceState) {var ogU = location.pathname + window._cf_chl_opt.cOgUQuery + window._cf_chl_opt.cOgUHash;history.replaceState(null, null,\"/auth/me?__cf_chl_rt_tk=7wsYOVL3FHOfa6FRJEyx3zUSKuVHPG35YBIAruiw1DQ-1780544904-1.0.1.1-CKL5_US3Pj1LaPSvAz9rDalLazKtyyqGItfHfZ9ZGG4\"+ window._cf_chl_opt.cOgUHash);a.onload = function() {history.replaceState(null, null, ogU);}}document.getElementsByTagName('head')[0].appendChild(a);}());</script>",
 							"otherinfo": "No links have been found while there are scripts, which is an indication that this is a modern web application."
 						},
 						{
@@ -569,7 +599,7 @@
 							"method": "GET",
 							"param": "",
 							"attack": "",
-							"evidence": "<script nonce=\"8kwOSiiNJAfFkAQz1Dj8m1\">(function(){window._cf_chl_opt = {cFPWv: 'g',cH: '2umRloNu08MR0mHM2sUqXnnlRukIilZRj8SI.2tv6uo-1780542175-1.2.1.1-Iz7fHNAgzdCHVoW0U2NmW38HqD5r.j7TnFfXXYYzo9LchuQQGsau7OCoZ902h2ti',cITimeS: '1780542175',cN: '8kwOSiiNJAfFkAQz1Dj8m1',cRay: 'a063b3948812a727',cTplB: '0',cTplC:0,cTplO:0,cTplV:5,cType: 'managed',cUPMDTk:\"/chat.html?__cf_chl_tk=oJHVqSHVLLPyU7.aiIN1t0FqbM3Jgh5bAcS._OMWyqY-1780542175-1.0.1.1-Kxhio5zgdaKEXBShycJl3X8QRxuAaiYMwhtsgfIhohQ\",cvId: '3',cZone: 'athithya.site',fa:\"/chat.html?__cf_chl_f_tk=oJHVqSHVLLPyU7.aiIN1t0FqbM3Jgh5bAcS._OMWyqY-1780542175-1.0.1.1-Kxhio5zgdaKEXBShycJl3X8QRxuAaiYMwhtsgfIhohQ\",md: 'hNLj0MroQRYHhAHadcy9hOHo8pzccRcDmME6bHgoD4g-1780542175-1.2.1.1-8YDSvPJETdW7ObCuXCdXo.JOGstmb9Hc2sz8bRbNylTkF90cauq2rT1ZR5_U75RFDVO9I884cgsUI.hr367ZL8em5T.zs_lSSesuA6wa.2_iCpkjkJrSRgwH1mzI58GtxZc.aUC7R0vRNnM4m33eyCDdgcLtM26YEfO0eh7N3_OaG6QOY20goR7_JBSFTmhlWGu6JgPo4l2FDSRYfnpGWXS6fp5w3k2D5PiITTxSk69PrcgvsgPEoFcpK4q4WcQ1_qaZ6pjSZnV.5nwCVOKkbwHfv0nLUg1MZyhI5f2L5j_oSZDCuqEiBIPGnE5TrzAj.ll7YRRbrIER1yJUlTKQLxbMCvMXPHEsJ.J40oYgMfTB0oQukbRswqoVL9rpwhzFhYuVbfNYpjqYA9ACOGbftvDIAxifu5c_Mw11My1FBK0IHyAOFZT5mZ4tguiTHD0yp0eMwRVzXjuhPvlRxBIsvtXCG5Ivx4J8oMKfDPdQdHq2qHERUrJVYyA09gHxsjc9SnOcvYNPgy.9ec1jEniLEwZOP9bQ3eyHChhDVIjv4cc3OjNTEJZJ7MZuedi4A8MaXQ.1p9g3ZJfgmj2OW5KqSF3Mb6uzHB10TqQC0BlH72dLhrJJBOj6lxJSK5Fnij3NPRzs8kdsMwSy9GyvOzge9nlW2DNrrNkxyCO179W8MIZJjrCMIbiKrV2vPHzbRMdiuGN7C9.hvswa7DMFfaVfYGE9NRE0Pe62DauvpVrwv5ZnjYpMc3cvXVmneeboJ9HQZTQ6nlEV.bqeng.8vb3UVOF4B.0N4Cc_mco0F4.eB6otGQSQkaDdEUGIP5MmPGCoPvKtbDnM.dXOMiqQC1hEjHK1hKVBOLAz2i__Y3T1gkX5bD8Pdv57ToQX4TdBNGQ4XiLbJwy88FuoZMDWFGaGfJ0218c99PQRzXt0QGLaJiQCNufm9E2QPTy37ehz9_op',mdrd: 'dPKx0_rIgOFbpquczAdxZfq12DvR4Hw7NyUrmlQxX4k-1780542175-1.2.1.1-iw.VOYLVK50c7xOadmGJAR4fPMELtuiDWbjTPJMZa6HU8b4BPHZkqzDbIVUNsrubSxuJKiKDV4H8xnE_GbWdXHq.TaU4LbGyLL93RW7ZwSbgiO.4A.m5yvOhcFgp4v_TWD44yfYU1MF5sICp1Mo22FX3xqHfEeyylp0ZQ3xmz7k',};var a = document.createElement('script');a.nonce = '8kwOSiiNJAfFkAQz1Dj8m1';a.src = '/cdn-cgi/challenge-platform/h/g/orchestrate/chl_page/v1?ray=a063b3948812a727';window._cf_chl_opt.cOgUHash = location.hash === '' && location.href.indexOf('#') !== -1 ? '#' : location.hash;window._cf_chl_opt.cOgUQuery = location.search === '' && location.href.slice(0, location.href.length - window._cf_chl_opt.cOgUHash.length).indexOf('?') !== -1 ? '?' : location.search;if (window.history && window.history.replaceState) {var ogU = location.pathname + window._cf_chl_opt.cOgUQuery + window._cf_chl_opt.cOgUHash;history.replaceState(null, null,\"/chat.html?__cf_chl_rt_tk=oJHVqSHVLLPyU7.aiIN1t0FqbM3Jgh5bAcS._OMWyqY-1780542175-1.0.1.1-Kxhio5zgdaKEXBShycJl3X8QRxuAaiYMwhtsgfIhohQ\"+ window._cf_chl_opt.cOgUHash);a.onload = function() {history.replaceState(null, null, ogU);}}document.getElementsByTagName('head')[0].appendChild(a);}());</script>",
+							"evidence": "<script nonce=\"mqXiJPDVlLU5NHC3yvxBAS\">(function(){window._cf_chl_opt = {cFPWv: 'g',cH: 'Bg7W0pA8LChKhcVvxVlyVtuFgXpUQlwvGigUCG3omSw-1780544903-1.2.1.1-loAB3tL5js911Wtc1fHvVa9spn3jXywxaZj4XJ27tEoB6zrPUPci3DWGd3NhCepu',cITimeS: '1780544903',cN: 'mqXiJPDVlLU5NHC3yvxBAS',cRay: 'a063f62f1bf4c94c',cTplB: '0',cTplC:0,cTplO:0,cTplV:5,cType: 'managed',cUPMDTk:\"/chat.html?__cf_chl_tk=WDKEDi4376FNz9ja.57b76.P94Nc4tRHZaBIkLAQMYQ-1780544903-1.0.1.1-EIXg1P38Rb0_aLZWznQtep1sfrHEpzvEGvoM9Bm9XIk\",cvId: '3',cZone: 'athithya.site',fa:\"/chat.html?__cf_chl_f_tk=WDKEDi4376FNz9ja.57b76.P94Nc4tRHZaBIkLAQMYQ-1780544903-1.0.1.1-EIXg1P38Rb0_aLZWznQtep1sfrHEpzvEGvoM9Bm9XIk\",md: 'Xh2vKLlVE5imVojZAoZxBWMV29_fP9z5Apg4Jd2QAeQ-1780544903-1.2.1.1-MiVdU7PYm6o.dLAsota5oOiAKGCRxjyEkloz4KkdP2KjzMo.f.sF6x5FguTs1yPX14JVrMGjnlDZ8DaC9HmFGwLICrGsZinC84DxL.65SNAWWBks4mFiW5KBOBOo.rt05nadlzhd1enbsKiJxKIYa1COftEmOQ0V9iPhJ1zWr7PeN.cPz_5PCO5gneA9z0gCRxh9dmJ8u6Vc_5sx0FtyGG7ULFdmTz75dROn2IbW9NGZ85KZjANy9_JoNf68cd1C1qAdFD1dlefynx11cqreGGTY1745ccqbbY2pAs18vVWCBmRqco4w7_LuUQdxsLlclQr3Ue07FxCV3nUEjs00VU6VEraP6zK7cQThCMn5kIJ7Mmw_uV5zT6hNqSrJTLF1pD96vlh_cv6mv9DAweTy1zO7PCUCF0vZTm_B1H00aWF17eWS0xzPmBggB8ht3_MTgoYJMZRMqIQQKcKyJM17jpjyDEq2lgo2PxzUJPgnxtLOqYpg6VgBWUpB1REKva7gSfLQNb6QqabVQcjCSDz5b_QX..feBsFgJMuyJtn2N__8juAKfE0EQTwYIvj4aFaUARkBWvbB2QTCTma6TSn6do4lpU52TCf30BJ_9qBcasbywrV9SZzbx1bnYM8U4wyhGNes1swfBqw6BpP2IqIca0.wYSDmnCCQxpuNvJtCb9b2ZnQNIKI3m_ysAuiSXz9PGtCDK51iHwI4qnsPX4_Vv0vQJGjN6jjboZx2nIvTuADPRFkIfVdv3ncff.xc5VDrhgK.NuOK8BZiq6xWc2uEA.LChu7xJptH_FsV5QXZqLswY8CU9_kbnK3oPPnvbwQl9x09grOgBJ9QRrTjI9ZZUw_gPVbbDDPeAY2rbeFu33jRcIQAsz4FPvRDDPc6SbiNemuB5y3BV8QEtj3OLnTrsVyf37McxE9N0iadCQmQzfs',mdrd: 'OlrnVkvgYEMO.QWpDk2L9xDSdQZXMUxuvEI8i7bYYqY-1780544903-1.2.1.1-c4LOlDGV3TnLiN2ZgVIROXx47KUDoRqyApjQhyNnPuaprCVnKZiP6qrokpTYH6uYADNqfSOJ1YGCZ1IEAHKgPaYzP5gR7nH0IROPXYP1vDDiLQDoydo4Qa3zo2jOZoMx1BbOMM8_hMAvk7G3lTng6aNkUehEskd.4iqzI92npZ4',};var a = document.createElement('script');a.nonce = 'mqXiJPDVlLU5NHC3yvxBAS';a.src = '/cdn-cgi/challenge-platform/h/g/orchestrate/chl_page/v1?ray=a063f62f1bf4c94c';window._cf_chl_opt.cOgUHash = location.hash === '' && location.href.indexOf('#') !== -1 ? '#' : location.hash;window._cf_chl_opt.cOgUQuery = location.search === '' && location.href.slice(0, location.href.length - window._cf_chl_opt.cOgUHash.length).indexOf('?') !== -1 ? '?' : location.search;if (window.history && window.history.replaceState) {var ogU = location.pathname + window._cf_chl_opt.cOgUQuery + window._cf_chl_opt.cOgUHash;history.replaceState(null, null,\"/chat.html?__cf_chl_rt_tk=WDKEDi4376FNz9ja.57b76.P94Nc4tRHZaBIkLAQMYQ-1780544903-1.0.1.1-EIXg1P38Rb0_aLZWznQtep1sfrHEpzvEGvoM9Bm9XIk\"+ window._cf_chl_opt.cOgUHash);a.onload = function() {history.replaceState(null, null, ogU);}}document.getElementsByTagName('head')[0].appendChild(a);}());</script>",
 							"otherinfo": "No links have been found while there are scripts, which is an indication that this is a modern web application."
 						}
 					],
@@ -623,7 +653,7 @@
 					"desc": "<p>Check for differences in response based on fuzzed User Agent (eg. mobile sites, access as a Search Engine Crawler). Compares the response statuscode and the hashcode of the response body with the original response.</p>",
 					"instances":[ 
 						{
-							"id": "503",
+							"id": "195",
 							"uri": "https://athithya.site/",
 							"nodeName": "https:\/\/athithya.site\/",
 							"method": "GET",
@@ -633,7 +663,7 @@
 							"otherinfo": ""
 						},
 						{
-							"id": "502",
+							"id": "194",
 							"uri": "https://athithya.site/",
 							"nodeName": "https:\/\/athithya.site\/",
 							"method": "GET",
@@ -643,7 +673,7 @@
 							"otherinfo": ""
 						},
 						{
-							"id": "501",
+							"id": "193",
 							"uri": "https://athithya.site/",
 							"nodeName": "https:\/\/athithya.site\/",
 							"method": "GET",
@@ -660,7 +690,7 @@
 					"reference": "<p>https://owasp.org/wstg</p>",
 					"cweid": "0",
 					"wascid": "0",
-					"sourceid": "61"
+					"sourceid": "26"
 				}
 			]
 		}
