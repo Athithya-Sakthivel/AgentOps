@@ -117,7 +117,7 @@ jobs:
 
           parameters:
             failOnError: false
-            failOnWarning: false
+            failOnWarning: false        # ← Prevents exit code 2 from spider warnings
             progressToStdout: true
 
           jobs:
@@ -150,7 +150,7 @@ jobs:
                   url: "${TARGET}/admin/override"
                   method: POST
 
-            # Spider public pages
+            # Spider public pages (403 from Cloudflare is expected – only a warning)
             - type: spider
               parameters:
                 context: agentops
