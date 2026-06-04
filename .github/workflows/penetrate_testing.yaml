@@ -1,12 +1,6 @@
 name: ZAP DAST Scan for AgentOps (Authenticated)
 
 on:
-  # push:
-  #  branches: [ main ]
-  # pull_request:
-  #  branches: [ main ]
-  # schedule:
-  #  - cron: '0 6 * * 1'  # Every Monday at 06:00 UTC
   workflow_dispatch:
 
 env:
@@ -23,14 +17,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Prepare report directory
+        run: |
+          mkdir -p reports
+          chmod 777 reports
+
       # -----------------------------------------------------------------
-      # Login script: extracts JWT from localStorage after OAuth flow
+      # Create Google login script (Playwright – returns cookies)
       # -----------------------------------------------------------------
       - name: Create AgentOps login script
         run: |
           cat > /tmp/agentops_login.py << 'PYEOF'
           #!/usr/bin/env python3
-          """Log into Kestral via Google OAuth and return JWT from localStorage."""
+          """Log into Kestral via Google OAuth and return cookies for ZAP."""
           import os, json
           from playwright.sync_api import sync_playwright
 
@@ -63,14 +62,12 @@ jobs:
                   except Exception:
                       page.wait_for_url(f"{target_url}/**", timeout=20000)
 
-                  # Extract JWT from localStorage
-                  jwt_token = page.evaluate("localStorage.getItem('app_jwt')")
+                  # Collect cookies
+                  all_cookies = context.cookies()
+                  domain = target_url.split("://")[1].split("/")[0]
+                  target_cookies = {c["name"]: c["value"] for c in all_cookies if domain in c.get("domain","")}
                   browser.close()
-
-                  if not jwt_token:
-                      raise RuntimeError("Failed to extract JWT from localStorage")
-
-                  return {"jwt": jwt_token}
+                  return target_cookies
 
           if __name__ == "__main__":
               session = get_authenticated_session()
@@ -79,7 +76,7 @@ jobs:
           chmod +x /tmp/agentops_login.py
 
       # -----------------------------------------------------------------
-      # ZAP automation plan (written to workspace directory)
+      # Write ZAP automation plan (browser auth + cookie session)
       # -----------------------------------------------------------------
       - name: Write ZAP automation plan
         run: |
@@ -88,8 +85,7 @@ jobs:
           cat > zap_automation.yaml <<EOF
           env:
             contexts:
-              # Unauthenticated context for public pages
-              - name: public
+              - name: agentops
                 urls:
                   - "${TARGET}"
                 includePaths:
@@ -100,125 +96,94 @@ jobs:
                   - '^${TARGET}/.*\.(js|css|png|jpg|jpeg|svg|ico|webp|woff2|ttf)$$'
                   - '^${TARGET}/healthz$$'
                   - '^${TARGET}/readyz$$'
-
-              # Authenticated context for admin endpoints
-              - name: admin
-                urls:
-                  - "${TARGET}"
-                includePaths:
-                  - '^${TARGET}/admin/.*'
-                excludePaths:
-                  - '^${TARGET}/static/.*'
-                  - '^${TARGET}/assets/.*'
-                  - '^${TARGET}/.*\.(js|css|png|jpg|jpeg|svg|ico|webp|woff2|ttf)$$'
                 authentication:
-                  method: script
-                  script:
-                    engine: python
-                    file: /tmp/agentops_login.py
+                  method: browser
                   parameters:
-                    sessionToken: jwt
+                    loginPageUrl: "${TARGET}/auth/login"
+                    loginPageWait: 5
+                    stepDelay: 1
+                    browserId: firefox-headless
+                    diagnostics: false
+                    steps:
+                      - description: "Auto-detect and submit login form"
+                        type: AUTO_STEPS
                 sessionManagement:
-                  method: script
-                  script:
-                    engine: python
-                    file: /zap/wrk/apply_token.py
+                  method: cookie
+                users:
+                  - name: agentops
+                    credentials:
+                      username: "$${TEST_ACCOUNT_EMAIL}"
+                      password: "$${TEST_ACCOUNT_PASSWORD}"
 
-            parameters:
-              failOnError: false
-              failOnWarning: false
-              progressToStdout: true
+          parameters:
+            failOnError: false
+            failOnWarning: false
+            progressToStdout: true
 
           jobs:
-            # Seed ZAP's site tree with known endpoints
+            # Seed ZAP's site tree
             - type: requestor
-              parameters: {}
+              parameters:
+                user: agentops
               requests:
                 - name: Home page
                   url: "${TARGET}/"
-                  method: GET
                 - name: Chat page
                   url: "${TARGET}/chat.html"
-                  method: GET
                 - name: Login page
                   url: "${TARGET}/auth/login"
-                  method: GET
                 - name: OAuth login start
                   url: "${TARGET}/auth/login/start/google"
-                  method: GET
                 - name: Logout
                   url: "${TARGET}/auth/logout"
-                  method: GET
-                - name: User info (unauthenticated)
+                - name: User info
                   url: "${TARGET}/auth/me"
-                  method: GET
                 - name: JWKS endpoint
                   url: "${TARGET}/.well-known/jwks.json"
-                  method: GET
+                - name: Admin dashboard
+                  url: "${TARGET}/admin"
+                - name: Admin queue
+                  url: "${TARGET}/admin/queue"
+                - name: Admin analytics
+                  url: "${TARGET}/admin/analytics"
+                - name: Admin override
+                  url: "${TARGET}/admin/override"
+                  method: POST
 
-            # Discover public pages
+            # Spider public pages
             - type: spider
               parameters:
-                context: public
+                context: agentops
+                user: agentops
                 maxChildren: 15
-                recurse: true
 
-            # Active scan public pages
+            # Active scan all in-scope pages
             - type: activeScan
               parameters:
-                context: public
+                context: agentops
+                user: agentops
                 policy: Default Policy
                 defaultStrength: "${{ env.ZAP_ATTACK_STRENGTH }}"
                 defaultThreshold: "${{ env.ZAP_ALERT_THRESHOLD }}"
                 maxRuleDurationInMins: 2
-                maxScanDurationInMins: 8
+                maxScanDurationInMins: 12
                 delayInMs: 500
                 threadPerHost: 1
                 handleAntiCSRFTokens: true
                 maxAlertsPerRule: 5
 
-            # Active scan admin endpoints (authenticated)
-            - type: activeScan
-              parameters:
-                context: admin
-                policy: Default Policy
-                defaultStrength: "${{ env.ZAP_ATTACK_STRENGTH }}"
-                defaultThreshold: "${{ env.ZAP_ALERT_THRESHOLD }}"
-                maxRuleDurationInMins: 2
-                maxScanDurationInMins: 10
-                delayInMs: 500
-                threadPerHost: 1
-                handleAntiCSRFTokens: true
-                maxAlertsPerRule: 5
-
-            # Generate report
+            # Report
             - type: report
               parameters:
                 template: traditional-json
                 reportDir: /zap/wrk
                 reportFile: zap_report
                 reportTitle: AgentOps ZAP DAST Report
-                reportDescription: Authenticated scan of AgentOps admin endpoints
+                reportDescription: Authenticated scan of AgentOps
           EOF
 
       # -----------------------------------------------------------------
-      # Helper script: apply JWT as Authorization header
-      # -----------------------------------------------------------------
-      - name: Write token application script
-        run: |
-          cat > apply_token.py << 'PYEOF'
-          import json, os
-
-          def apply_token(session):
-              """Called by ZAP before each request. Adds the JWT as an Authorization header."""
-              jwt = session.get("jwt")
-              if jwt:
-                  session["headers"]["Authorization"] = f"Bearer {jwt}"
-              return session
-          PYEOF
-
-      # -----------------------------------------------------------------
-      # Run ZAP in Docker (mount workspace as /zap/wrk)
+      # Run ZAP in Docker
       # -----------------------------------------------------------------
       - name: Run ZAP authenticated scan
         run: |
