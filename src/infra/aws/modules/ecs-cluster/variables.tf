@@ -40,8 +40,7 @@ variable "cloudflare_tunnel_token" {
 }
 
 variable "cloudflare_hostname" {
-  type    = string
-  default = "athithya.site"
+  type = string
 }
 
 variable "tags" {

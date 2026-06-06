@@ -77,7 +77,7 @@ Policy documents are pre‑embedded with Bedrock Titan v2, stored as a single ~1
 3. **An AWS account with sufficient IAM permissions (AdministratorAccess or equivalent) to manage**:
    * Amazon ECS (Elastic Container Service)
    * EC2, VPCs, Subnets, and Security Groups
-   * Amazon S3
+   * Amazon S3, SSM, ECR
    * IAM Roles, Policies, and Instance Profiles
    **AWS Free Tier is sufficient for development and testing purposes.**
 4. **A Cloudflare account with a registered domain, with permissions to manage DNS records and create Cloudflare Tunnels (cloudflared)**
@@ -209,3 +209,14 @@ git add . && git commit -m "Rebuilding mcp and agent docker images" && git push 
 aws ecs update-service --cluster agentops-staging-cluster --service agentops-staging-cluster-agent --force-new-deployment --region ap-south-1
 aws ecs update-service --cluster agentops-staging-cluster --service agentops-staging-cluster-mcp --force-new-deployment --region ap-south-1
 ```
+
+
+![alt text](image.png)
+
+
+<details>
+<summary>▶ Expected output</summary>
+
+![alt text](src/offline/images/ci.png)
+
+</details>

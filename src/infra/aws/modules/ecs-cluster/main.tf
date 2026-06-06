@@ -1,23 +1,13 @@
-data "aws_ami" "ecs_optimized" {
-  most_recent = true
-  owners      = ["amazon"]
-
-  filter {
-    name = "name"
-    # Matches the ARM64 variant of the ECS-optimized AMI
-    values = ["amzn2-ami-ecs-hvm-*-arm64-ebs"]
-  }
-
-  # This filter ensures the AMI architecture matches your Graviton instances
-  filter {
-    name   = "architecture"
-    values = ["arm64"]
-  }
+# ----------------------------------------------------------------------
+# Latest ECS-optimized AMI (Amazon Linux 2023, ARM64)
+# ----------------------------------------------------------------------
+data "aws_ssm_parameter" "ecs_optimized_ami" {
+  name = "/aws/service/ecs/optimized-ami/amazon-linux-2023/arm64/recommended/image_id"
 }
 
 resource "aws_launch_template" "main" {
   name_prefix   = "${var.cluster_name}-lt"
-  image_id      = data.aws_ami.ecs_optimized.id
+  image_id      = data.aws_ssm_parameter.ecs_optimized_ami.value
   instance_type = var.instance_type
 
   vpc_security_group_ids = [var.security_group_id]

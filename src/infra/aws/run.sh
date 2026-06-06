@@ -1,8 +1,26 @@
 #!/usr/bin/env bash
 # src/infra/aws/run.sh
-# Production-ready, idempotent wrapper to manage OpenTofu (tofu) lifecycle.
-# --create: builds all resources (VPC, RDS, ECS, etc.)
-# --destroy: tears down everything (including EC2 orphans, RDS, S3, VPC)
+#
+# Production-ready, idempotent wrapper to manage OpenTofu (tofu) lifecycle:
+#  - --plan      : init backend, fmt/validate (auto-fix), produce a plan file (dry-run)
+#  - --create    : init backend, fmt/validate (auto-fix), plan, then apply -auto-approve
+#  - --destroy   : init backend, then destroy (requires --yes-delete)
+#  - --validate  : init backend and validate backend / prereqs
+#  - --find-version / --rollback-state <versionId> : state management helpers.
+#  --env staging --rollback-state mJy09P8lI1XBnjVKjgtHja_rNDhZUOMF --yes-delete
+# 
+# Usage:
+#   bash src/infra/aws/run.sh --plan  --env staging
+#   bash src/infra/aws/run.sh --create --env staging
+#   bash src/infra/aws/run.sh --destroy --env staging --yes-delete
+#   bash src/infra/aws/run.sh --env staging --find-version
+#
+# Notes / invariants:
+#  - AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION are used (fallback ap-south-1).
+#  - Script does NOT commit formatted changes to git; it only auto-formats files in-place.
+#  - State bucket is versioned (ENABLED) and encrypted (AES256).
+#  - State locking is done natively via S3 using `use_lockfile=true` (no DynamoDB required).
+#  - Script exits non-zero on any infrastructure mutation failure.
 
 set -euo pipefail
 IFS=$'\n\t'
@@ -34,10 +52,9 @@ export TF_VAR_mcp_repository_name="${TF_VAR_mcp_repository_name:-agentops-stagin
 # ---- GitHub CI/CD ----
 export TF_VAR_github_repository="${TF_VAR_github_repository:-Athithya-Sakthivel/AgentOps}"
 
-# ---- Cloudflare (sensitive – override with real token) ----
-if [ -z "${TF_VAR_cloudflare_tunnel_token:-}" ]; then
-  export TF_VAR_cloudflare_tunnel_token="$(tofu -chdir=src/infra/cloudflare output -raw cloudflare_tunnel_token 2>/dev/null || echo "")"
-fi
+# ---- Cloudflare ----
+export TF_VAR_cloudflare_tunnel_token="$(tofu -chdir=src/infra/cloudflare output -raw cloudflare_tunnel_token 2>/dev/null || echo "")"
+export TF_VAR_cloudflare_hostname="${TF_VAR_cloudflare_hostname:-athithya.site}"
 
 # ---- RDS ----
 export TF_VAR_create_rds="${TF_VAR_create_rds:-true}"

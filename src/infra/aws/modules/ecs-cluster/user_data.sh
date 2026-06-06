@@ -1,76 +1,55 @@
 #!/bin/bash
-# =============================================================================
-# AgentOps — EC2 User Data (Production, ARM64 / t4g)
-# =============================================================================
-set -euo pipefail
+set +e
 
-yum update -y ecs-init
+# ----- 1. Configure and start ECS agent FIRST (critical) -----
 
-# ----- 1. Install cloudflared (specific version for ARM64) -----
-echo "[INFO] Installing cloudflared (2026.5.0) for ARM64..."
-curl -L "https://github.com/cloudflare/cloudflared/releases/download/2026.5.0/cloudflared-linux-arm64" -o /usr/local/bin/cloudflared
-chmod +x /usr/local/bin/cloudflared
+cat <<EOF >> /etc/ecs/ecs.config
+ECS_CLUSTER=${cluster_name}
+ECS_ENABLE_MANAGED_INSTANCE=true
+EOF
 
-# ----- 2. Install cloudflared as a systemd service with the token -----
-echo "[INFO] Installing cloudflared as systemd service..."
-cloudflared service install "${cloudflare_tunnel_token}"
+systemctl enable --now ecs
 
-# ----- 3. Write custom ingress config to the correct location -----
-mkdir -p /etc/cloudflared
-
-# Important: No quotes around the delimiter 'YAML' to allow variable substitution
-cat > /etc/cloudflared/config.yml << YAML
+# ----- 2. Install cloudflared (best effort, does not block ECS) -----
+(
+  set +e
+  # Change from 'yum' to 'dnf', dnf is the default package manager for Amazon Linux 2023
+  dnf install -y curl 2>/dev/null || true
+  
+  curl -L "https://github.com/cloudflare/cloudflared/releases/download/2026.5.0/cloudflared-linux-arm64" -o /usr/local/bin/cloudflared
+  if [ -f /usr/local/bin/cloudflared ]; then
+    chmod +x /usr/local/bin/cloudflared
+    # Added the --nowait flag for a more reliable install
+    cloudflared service install "${cloudflare_tunnel_token}" --nowait 2>/dev/null || true
+    
+    mkdir -p /etc/cloudflared
+    cat > /etc/cloudflared/config.yml << YAML
 ingress:
-  # Block internal endpoints
   - hostname: ${cloudflare_hostname}
     path: ^/healthz$
     service: http_status:403
   - hostname: ${cloudflare_hostname}
     path: ^/readyz$
     service: http_status:403
-
-  # Auth + WebSocket + API
   - hostname: ${cloudflare_hostname}
     path: /auth/*
     service: http://localhost:8000
   - hostname: ${cloudflare_hostname}
     path: /ws/*
     service: http://localhost:8000
-    originRequest:
-      connectTimeout: "10s"
-      keepAliveTimeout: "120s"
-      disableChunkedEncoding: false
   - hostname: ${cloudflare_hostname}
     path: /.well-known/*
     service: http://localhost:8000
-      # Admin dashboard + API
-
   - hostname: ${cloudflare_hostname}
     path: /admin/*
     service: http://localhost:8000
-
-  # Root (frontend)
   - hostname: ${cloudflare_hostname}
     path: /
     service: http://localhost:8000
-    originRequest:
-      connectTimeout: "10s"
-      keepAliveTimeout: "60s"
-      disableChunkedEncoding: false
-
-  # Catch-all
   - service: http_status:404
 YAML
+    systemctl restart cloudflared 2>/dev/null || true
+  fi
+) &
 
-# ----- 4. Restart the service to pick up the new config -----
-echo "[INFO] Restarting cloudflared service with custom configuration..."
-systemctl restart cloudflared
-
-# ----- 5. ECS agent configuration (as confirmed by AWS docs) -----
-echo "ECS_CLUSTER=${cluster_name}" >> /etc/ecs/ecs.config
-echo "ECS_ENABLE_MANAGED_INSTANCE=true" >> /etc/ecs/ecs.config
-
-# Enable and start the ECS agent
-systemctl enable --now ecs
-
-echo "[INFO] Setup complete for instance in cluster ${cluster_name}."
+echo "[INFO] ECS agent started. Cloudflared installation running in background."
