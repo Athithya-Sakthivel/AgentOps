@@ -274,3 +274,4 @@ else
   echo "    Manual test : fastmcp call http://localhost:${MCP_PORT}/mcp lookup_customer email=priya.sharma@email.com"
   exit 1
 fi 
+ 

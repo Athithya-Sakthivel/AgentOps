@@ -43,14 +43,23 @@ ingress:
   - hostname: ${cloudflare_hostname}
     path: /.well-known/*
     service: http://localhost:8000
+      # Admin dashboard + API
 
-  # Admin dashboard + API
   - hostname: ${cloudflare_hostname}
     path: /admin/*
     service: http://localhost:8000
 
-  # Catch‑all – all other requests go to agent service
-  - service: http://localhost:8000
+  # Root (frontend)
+  - hostname: ${cloudflare_hostname}
+    path: /
+    service: http://localhost:8000
+    originRequest:
+      connectTimeout: "10s"
+      keepAliveTimeout: "60s"
+      disableChunkedEncoding: false
+
+  # Catch-all
+  - service: http_status:404
 YAML
 
 # ----- 4. Restart the service to pick up the new config -----
