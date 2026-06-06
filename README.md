@@ -1,3 +1,7 @@
+[▶ Watch the Demo Video](https://www.youtube.com/watch?v=GD__e4UwAlA)
+
+---
+
 # AgentOps
 
 **AI‑powered ticket triage for e‑commerce support teams — built with LangGraph, DSPy, and Bedrock — deployed on AWS for $23/month.**
@@ -66,6 +70,38 @@ Policy documents are pre‑embedded with Bedrock Titan v2, stored as a single ~1
 | **Cost‑optimised infra** | Cloudflare Tunnel, ECS Managed Instances, and inline RAG cut costs by 91% ($414 → $23/month). |
 | **Zero inbound ports** | All traffic enters via Cloudflare Tunnel; security groups have no inbound rules. |
 | **Observability built in** | JSON logs with correlation IDs, CloudWatch metric filters, dashboards, and alarms. |
+
+---
+
+
+## Cost Breakdown
+
+| Category | Baseline | Optimized | Saving |
+|----------|----------|-----------|--------|
+| Compute | $142 (Fargate) | $20 (2 × t4g.small, multi AZs) | $122 |
+| Networking | $62 (ALB + NAT + WAF) | $0 (Cloudflare Tunnel) | $62 |
+| Vector Search | $190 (OpenSearch) | ~$0.03 (S3 + NumPy) | $190 |
+| Observability | $15–20 (X‑Ray) | ~$3 (CloudWatch) | $12–17 |
+| **Total** | **~$414/month** | **~$23/month** | **91%** |
+
+---
+
+## Security (5 Layers) . [Docs](docs/security.md)
+
+```
+Edge (Cloudflare) → Application (FastAPI) → Container (Docker) → Network (AWS) → Data (PostgreSQL/SSM)
+```
+
+| Layer | Controls |
+|-------|---------|
+| **Edge** | Cloudflare Tunnel (mTLS, SSL strict), WAF (OWASP Top 10), DDoS, bot management. Zero inbound ports. |
+| **Application** | Google OAuth 2.0 + PKCE, ES256 JWTs (15‑min TTL), admin RBAC, parameterized queries, CORS restricted to origin. |
+| **Container** | Non‑root user (UID 1000), Python 3.12 slim, Trivy scan on push (blocks CRITICAL), immutable ECR tags. |
+| **Network** | RDS in private subnets, ECS security group only. Least‑privilege IAM: SSM read, Bedrock invoke, S3 read, DynamoDB write. |
+| **Data** | Secrets in SSM Parameter Store (encrypted). RDS encrypted at rest + TLS. Gitleaks full‑history scan + pre‑commit hook. |
+
+**DAST (OWASP ZAP):** 0 Critical · 0 High · 3 Medium (CSP on Cloudflare challenge page — not exploitable) · 3 Low · 4 Informational  
+**Threat model:** SQL Injection (none — parameterized queries) · XSS (none — auto‑escaping + CSP) · Credential theft (low — OIDC + short TTL JWT) · DDoS (none — Cloudflare) · Container escape (low — non‑root + minimal image)
 
 ---
 
@@ -182,7 +218,6 @@ bash src/offline/index-policies/commands.sh
 
 </details>
 
-```markdown
 ### Phase 3.1: Trigger CI Workflows (Build & Push Container Images)
 
 Pushes the `AWS_ACCOUNT_ID` and `AWS_REGION` secrets to GitHub, then makes a trivial whitespace commit to trigger the CI pipelines. GitHub Actions authenticates to ECR via OIDC (no static credentials), builds the `agent-service` and `mcp-server` Docker images, scans them with Trivy, and pushes them to ECR with immutable tags.
