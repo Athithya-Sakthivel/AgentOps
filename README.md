@@ -182,10 +182,10 @@ bash src/offline/index-policies/commands.sh
 
 </details>
 
+```markdown
+### Phase 3.1: Trigger CI Workflows (Build & Push Container Images)
 
-### Phase 3: Trigger CI Workflows (Build & Push Container Images)
-
-Pushes the `AWS_ACCOUNT_ID` and `AWS_REGION` secrets to GitHub, then makes a trivial whitespace commit to trigger the CI pipelines. GitHub Actions authenticates to ECR via OIDC (no static credentials), builds the `agent-service` and `mcp-server` Docker images, scans them with Trivy, and pushes them to ECR with immutable tags. Once pushed, the ECS services pick up the new images and the agent is live.
+Pushes the `AWS_ACCOUNT_ID` and `AWS_REGION` secrets to GitHub, then makes a trivial whitespace commit to trigger the CI pipelines. GitHub Actions authenticates to ECR via OIDC (no static credentials), builds the `agent-service` and `mcp-server` Docker images, scans them with Trivy, and pushes them to ECR with immutable tags.
 
 ```sh
 gh secret set AWS_ACCOUNT_ID --body $(aws sts get-caller-identity --query Account --output text)
@@ -202,21 +202,54 @@ git add . && git commit -m "Rebuilding mcp and agent docker images" && git push 
 
 </details>
 
+### Phase 3.2: Store OAuth Secrets in AWS SSM Parameter Store
 
-> Once images are pushed to ecr, force reload the ecs services to update the new image.
+The agent‑service authenticates users via Google OAuth (Microsoft is optional). These secrets are stored in SSM Parameter Store — never in code or environment variables — and fetched at runtime by the ECS task role with KMS decryption. By default all google domains are allowed in both user and admin login.
+
+> 🔑 **OAuth Setup:** [Google](https://oauth2-proxy.github.io/oauth2-proxy/configuration/providers/google/#usage) | [Microsoft](https://oauth2-proxy.github.io/oauth2-proxy/configuration/providers/ms_entra_id)
+
+```sh
+export GOOGLE_CLIENT_ID="..."
+export GOOGLE_CLIENT_SECRET="..."
+# Optional: Microsoft OAuth
+# export MICROSOFT_CLIENT_ID="..."
+# export MICROSOFT_CLIENT_SECRET="..."
+# export MICROSOFT_TENANT_ID="..."
+export DOMAIN="athithya.site"
+bash src/scripts/ssm-put.sh
+```
+
+### Phase 3.3: Force Redeploy ECS Services
+
+Once the CI pipeline pushes the new images to ECR, force a rolling update on both ECS services so they pull the latest image tags. After ~5 minutes the agent is accessible at `https://<DOMAIN>`.
 
 ```sh
 aws ecs update-service --cluster agentops-staging-cluster --service agentops-staging-cluster-agent --force-new-deployment --region ap-south-1
 aws ecs update-service --cluster agentops-staging-cluster --service agentops-staging-cluster-mcp --force-new-deployment --region ap-south-1
 ```
 
+<details>
+<summary>▶ Expected output</summary>
 
-![alt text](image.png)
+![alt text](src/offline/images/force_reload.png)
 
+</details>
+
+---
+
+### Phase 4: Teardown
+
+Destroys the Cloudflare DNS records and Tunnel, then tears down all AWS resources (VPC, ECS, RDS, S3, DynamoDB, ECR, IAM roles). Order matters: Cloudflare first so the tunnel stops routing traffic before the backend is removed.
+
+```sh
+bash src/infra/cloudflare/run.sh --destroy
+bash src/infra/aws/run.sh --destroy --env staging --yes-delete
+```
 
 <details>
 <summary>▶ Expected output</summary>
 
-![alt text](src/offline/images/ci.png)
+![alt text](src/offline/images/delete.png)
+
 
 </details>
