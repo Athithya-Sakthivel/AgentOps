@@ -142,12 +142,8 @@ export DOMAIN="athithya.site"  # replace with your domain
 bash src/infra/cloudflare/run.sh --apply
 ```
 
-<details>
-<summary>▶ Expected output</summary>
-
 ![alt text](src/offline/images/cf.png)
 
-</details>
 
 #### 1.2 Provision AWS Infrastructure. [Docs](docs/infra.md)
 Provisions a VPC (public subnets for ECS, private subnets for RDS), a 2‑node ECS cluster on `t4g.small` ARM64 instances, S3 (policy embeddings), DynamoDB (rate‑limiting counters), RDS PostgreSQL (business data + LangGraph checkpoints), ECR repositories (immutable tags, scan‑on‑push), and least‑privilege IAM roles — all declared in OpenTofu.
@@ -158,12 +154,7 @@ export TF_VAR_github_repository="Athithya-Sakthivel/AgentOps"   # replace with y
 bash src/infra/aws/run.sh --create --env staging
 ```
 
-<details>
-<summary>▶ Expected output</summary>
-
 ![alt text](src/offline/images/aws.png)
-
-</details>
 
 
 ### Phase 2: Data Preparation (Mimic a fictional e‑commerce company named Kestral)
@@ -185,12 +176,8 @@ python3 src/offline/simulate_company/setup_postgres.py && \
 bash src/offline/index-policies/commands.sh
 ```
 
-<details>
-<summary>▶ Expected output</summary>
-
 ![alt text](src/offline/images/simulate_kestral.png)
 
-</details>
 
 ### Phase 3.1: Trigger CI Workflows (Build & Push Container Images)
 
@@ -204,12 +191,8 @@ gh secret set AWS_REGION --body $TF_VAR_region
 git add . && git commit -m "Rebuilding mcp and agent docker images" && git push origin main
 ```
 
-<details>
-<summary>▶ Expected output</summary>
-
 ![alt text](src/offline/images/ci.png)
 
-</details>
 
 ### Phase 3.2: Store OAuth Secrets in AWS SSM Parameter Store
 
@@ -237,12 +220,7 @@ aws ecs update-service --cluster agentops-staging-cluster --service agentops-sta
 aws ecs update-service --cluster agentops-staging-cluster --service agentops-staging-cluster-mcp --force-new-deployment --region ap-south-1
 ```
 
-<details>
-<summary>▶ Expected output</summary>
-
 ![alt text](src/offline/images/force_reload.png)
-
-</details>
 
 ---
 
@@ -255,10 +233,16 @@ bash src/infra/cloudflare/run.sh --destroy
 bash src/infra/aws/run.sh --destroy --env staging --yes-delete
 ```
 
-<details>
-<summary>▶ Expected output</summary>
-
 ![alt text](src/offline/images/delete.png)
 
+---
 
-</details>
+
+## Key Takeaways
+
+- Guardrails execute before any tool invocation.
+- All business-impacting decisions remain with human agents.
+- Deterministic routing guarantees predictable ticket ownership.
+- Conversation state is checkpointed after every LangGraph node.
+- Inline RAG eliminates the need for a vector database.
+- Infrastructure is optimized for reliability, security, and cost efficiency.
