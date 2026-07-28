@@ -1,47 +1,21 @@
-[▶ Watch the Demo Video](https://www.youtube.com/watch?v=GD__e4UwAlA)
+## [▶ Agent Demo](https://www.youtube.com/watch?v=GD__e4UwAlA)
 
 ---
 
 # AgentOps
 
-**AI‑powered ticket triage for e‑commerce support teams — built with LangGraph, DSPy, and Bedrock — deployed on AWS for $23/month.**
+**Production-ready AI ticket triage system for e-commerce support teams, built with LangGraph, DSPy, Amazon Bedrock, and AWS.**
 
-AgentOps receives customer messages via WebSocket, classifies them with a DSPy‑optimised guardrail, gathers customer context (profile, orders) through an MCP server, then deterministically routes every issue to the correct human team. A LLM‑driven “ticket router” writes a 2‑3 sentence summary and a suggested action — support agents see the whole picture instantly and resolve tickets in seconds. The system **never** issues refunds, credits, or pickups autonomously; its only job is to make human agents faster and more accurate.
+AgentOps receives customer messages over WebSocket and processes them through a LangGraph workflow. Each message is first classified by a DSPy-optimized guardrail for safety, intent, urgency, and sentiment. The agent then retrieves customer context—including profile information and recent orders—from an MCP server before deterministically routing the request to the appropriate support team.
 
-Stack: `FastAPI` · `LangGraph` · `DSPy` · `Bedrock Llama 3 8B` · `FastMCP` · `PostgreSQL`  · `ECS`· `S3` · `CloudWatch` · `Cloudflare Tunnel`
+For tickets requiring human intervention, an LLM-powered ticket router generates a concise summary and a recommended next action to assist support agents. Customer-impacting operations such as refunds, credits, and pickup scheduling are intentionally excluded from the system. AgentOps is designed exclusively to support human decision-making, not to automate business actions.
 
----
+**Technology Stack:** `FastAPI` · `LangGraph` · `DSPy` · `Amazon Bedrock (Llama 3 8B)` · `FastMCP` · `PostgreSQL` · `Amazon ECS` · `Amazon S3` · `Amazon CloudWatch` · `Cloudflare Tunnel`
 
 ## Architecture
 
-```
-WebSocket Message
-      │
-      ▼
-┌─────────────────────────────────────────────────────────┐
-│                    LangGraph Agent                       │
-│                                                          │
-│  ┌──────────────────┐    ┌──────────────────┐           │
-│  │   guardrail      │───▶│    context       │           │
-│  │   classifier     │    │    gatherer      │           │
-│  └────────┬─────────┘    └────────┬─────────┘           │
-│           │                       │                     │
-│           │ unsafe / urgent       │                     │
-│           ▼                       ▼                     │
-│  ┌──────────────────┐    ┌──────────────────┐           │
-│  │   human          │    │   ticket         │           │
-│  │   escalate       │    │   router         │  LLM+tools│
-│  └──────────────────┘    └────────┬─────────┘           │
-│                                   │                     │
-│                                   ▼                     │
-│                            Final Response               │
-│                                                          │
-│  State persisted via AsyncPostgresSaver                  │
-└─────────────────────────────────────────────────────────┘
-      │
-      ▼
-  WebSocket Response (JSON)
-```
+<img width="1536" height="1024" alt="image" src="https://github.com/user-attachments/assets/8a7acac1-bf67-44e4-b832-b08c29924fd4" />
+
 
 **Four LangGraph nodes**  
 1. **Guardrail classifier** – DSPy‑compiled triage program (Llama 3 8B, temperature 0) classifies safety, intent, urgency, and sentiment. Unsafe or urgency ≥ 10 → immediate human escalation.  
