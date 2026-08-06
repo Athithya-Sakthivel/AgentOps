@@ -1,62 +1,38 @@
-## [▶ Agent Demo](https://www.youtube.com/watch?v=GD__e4UwAlA)
+# TicketWeave
+
+**AI-powered ticket triage system for e-commerce support teams, deployed on Amazon ECS with a 5-layer security architecture and cost optimizations**
+
+`TicketWeave` receives customer messages over WebSocket and processes them through a LangGraph workflow running on ECS-managed instances behind Cloudflare Tunnel—no load balancers, no public IPs, zero inbound ports. Each message is first classified by a DSPy-optimized guardrail for safety, intent, urgency, and sentiment. The agent then retrieves customer context—including profile information and recent orders—from an MCP server before deterministically routing the request to the appropriate support team.
+
+For tickets requiring human intervention, an LLM-powered ticket router generates a concise summary and a recommended next action to assist support agents. Customer-impacting operations such as refunds, credits, and pickup scheduling are intentionally excluded from the system. TicketWeave is designed exclusively to enhance human decision-making, not to automate business actions.
+
+**Technology Stack:** `Amazon ECS` · `Cloudflare Tunnel` · `FastAPI` · `LangGraph` · `DSPy` · `Amazon Bedrock (Llama 3 8B)` · `FastMCP` · `PostgreSQL` · `Amazon S3` · `Amazon CloudWatch`
 
 ---
 
-# AgentOps
-
-**Production-ready AI ticket triage system for e-commerce support teams, built with LangGraph, DSPy, Amazon Bedrock, and AWS.**
-
-AgentOps receives customer messages over WebSocket and processes them through a LangGraph workflow. Each message is first classified by a DSPy-optimized guardrail for safety, intent, urgency, and sentiment. The agent then retrieves customer context—including profile information and recent orders—from an MCP server before deterministically routing the request to the appropriate support team.
-
-For tickets requiring human intervention, an LLM-powered ticket router generates a concise summary and a recommended next action to assist support agents. Customer-impacting operations such as refunds, credits, and pickup scheduling are intentionally excluded from the system. AgentOps is designed exclusively to support human decision-making, not to automate business actions.
-
-**Technology Stack:** `FastAPI` · `LangGraph` · `DSPy` · `Amazon Bedrock (Llama 3 8B)` · `FastMCP` · `PostgreSQL` · `Amazon ECS` · `Amazon S3` · `Amazon CloudWatch` · `Cloudflare Tunnel`
-
-## Architecture
+## Architecture . [Docs](docs/architecture.md)
 
 <img width="1536" height="1024" alt="image" src="https://github.com/user-attachments/assets/8a7acac1-bf67-44e4-b832-b08c29924fd4" />
 
-
-**Four LangGraph nodes**  
-1. **Guardrail classifier** – DSPy‑compiled triage program (Llama 3 8B, temperature 0) classifies safety, intent, urgency, and sentiment. Unsafe or urgency ≥ 10 → immediate human escalation.  
-2. **Context gatherer** – Fetches customer profile + last 5 orders (with product names) from the MCP server using the user’s email.  
-3. **Ticket router** – LLM with two tools: `search_policies` (inline RAG) and `create_ticket`. Simple policy questions get an instant answer; issues needing human action produce a structured ticket with AI‑written summary and suggested action. Team assignment is **deterministic** (hard‑coded intent‑to‑team map), not left to the LLM.  
-4. **Human escalate** – Skips the LLM entirely; directly creates a high‑priority ticket via MCP for dangerous or extremely urgent messages.
-
-**State & persistence**  
-All conversation state is checkpointed to PostgreSQL after every node via `AsyncPostgresSaver` — the agent survives restarts and resumes any in‑flight conversation.
-
-**MCP server**  
-Three tools exposed over FastMCP: `lookup_customer`, `get_recent_orders`, `create_ticket`. It owns **zero** business logic — all routing, summarisation, and policy decisions stay in the agent.
-
-**Inline RAG**  
-Policy documents are pre‑embedded with Bedrock Titan v2, stored as a single ~1.3 MB JSON file in S3, loaded once at startup, and searched with in‑process NumPy cosine similarity (<5 ms). No vector database required.
+### Networking Flow
+```
+Internet → Cloudflare Tunnel → ECS Host (host network mode) → Agent Service → MCP Server → RDS
+```
+- **Zero inbound ports:** Security groups have no ingress rules; all traffic enters via Cloudflare Tunnel
+- **No load balancer:** Cloudflare Tunnel terminates on each EC2 host, eliminating ALB/NLB costs
+- **Private subnets:** RDS PostgreSQL deployed in private subnets, accessible only from ECS hosts
 
 ---
 
-## Key design decisions
+## Platform & Infrastructure . [Docs](docs/infra.md)
 
-| Decision | Why |
-|----------|-----|
-| **Never act autonomously** | The agent cannot refund, credit, or schedule pickups. Those tools were deliberately removed from the MCP server. |
-| **Deterministic routing** | A hard‑coded `INTENT → TEAM` table guarantees 100% predictable ticket assignment. |
-| **DSPy guardrail first** | Every message is classified **before** any context is fetched or any tool is called. |
-| **Cost‑optimised infra** | Cloudflare Tunnel, ECS Managed Instances, and inline RAG cut costs by 91% ($414 → $23/month). |
-| **Zero inbound ports** | All traffic enters via Cloudflare Tunnel; security groups have no inbound rules. |
-| **Observability built in** | JSON logs with correlation IDs, CloudWatch metric filters, dashboards, and alarms. |
-
----
-
-
-## Cost Breakdown
-
-| Category | Baseline | Optimized | Saving |
-|----------|----------|-----------|--------|
-| Compute | $142 (Fargate) | $20 (2 × t4g.small, multi AZs) | $122 |
-| Networking | $62 (ALB + NAT + WAF) | $0 (Cloudflare Tunnel) | $62 |
-| Vector Search | $190 (OpenSearch) | ~$0.03 (S3 + NumPy) | $190 |
-| Observability | $15–20 (X‑Ray) | ~$3 (CloudWatch) | $12–17 |
-| **Total** | **~$414/month** | **~$23/month** | **91%** |
+### Container Deployment Pipeline
+- **ECS Cluster:** 2 × t4g.small ARM64 managed instances across multiple AZs
+- **CI/CD:** GitHub Actions with OIDC authentication to ECR—no static credentials
+- **Image Security:** Immutable ECR tags, Trivy scanning on push (blocks CRITICAL vulnerabilities)
+- **Deployment:** Rolling updates via `aws ecs update-service --force-new-deployment`
+- **IaC:** OpenTofu for all AWS resources, scripted Cloudflare Tunnel + DNS provisioning
+- **Observability:** JSON logs with correlation IDs, CloudWatch metric filters, dashboards, and alarms
 
 ---
 
@@ -75,9 +51,56 @@ Edge (Cloudflare) → Application (FastAPI) → Container (Docker) → Network (
 | **Data** | Secrets in SSM Parameter Store (encrypted). RDS encrypted at rest + TLS. Gitleaks full‑history scan + pre‑commit hook. |
 
 **DAST (OWASP ZAP):** 0 Critical · 0 High · 3 Medium (CSP on Cloudflare challenge page — not exploitable) · 3 Low · 4 Informational  
-**Threat model:** SQL Injection (none — parameterized queries) · XSS (none — auto‑escaping + CSP) · Credential theft (low — OIDC + short TTL JWT) · DDoS (none — Cloudflare) · Container escape (low — non‑root + minimal image)
+**Threat model:** SQL Injection (none — parameterized queries) · XSS (none — auto‑escaping + CSP) · Credential theft (low — OIDC + short TTL JWT) · DDoS (none — Cloudflare) · Container escape (low — non‑root + minimal image). [DAST Report](src/reports/dast_scan_latest.json)
 
 ---
+
+## AI Workflow . [Docs](docs/agent_service.md)
+
+**Four LangGraph nodes**
+
+1. **Guardrail classifier** – DSPy‑compiled triage program (Llama 3 8B, temperature 0) classifies safety, intent, urgency, and sentiment. Unsafe or urgency ≥ 10 → immediate human escalation.
+2. **Context gatherer** – Fetches customer profile + last 5 orders (with product names) from the MCP server using the user's email.
+3. **Ticket router** – LLM with two tools: `search_policies` (inline RAG) and `create_ticket`. Simple policy questions get an instant answer; issues needing human action produce a structured ticket with AI‑written summary and suggested action. Team assignment is **deterministic** (hard‑coded intent‑to‑team map), not left to the LLM.
+4. **Human escalate** – Skips the LLM entirely; directly creates a high‑priority ticket via MCP for dangerous or extremely urgent messages.
+
+**State & persistence**  
+All conversation state is checkpointed to PostgreSQL after every node via `AsyncPostgresSaver` — the agent survives restarts and resumes any in‑flight conversation.
+
+**MCP server** . [Docs](docs/mcp_server.md)  
+Three tools exposed over FastMCP: `lookup_customer`, `get_recent_orders`, `create_ticket`. It owns **zero** business logic — all routing, summarisation, and policy decisions stay in the agent.
+
+**Inline RAG**  . [Docs](docs/serverless_rag.md)
+Policy documents are pre‑embedded with Bedrock Titan v2, stored as a single ~1.3 MB JSON file in S3, loaded once at startup, and searched with in‑process NumPy cosine similarity (<5 ms). No vector database required.
+
+---
+
+## Key Design Decisions . [Docs](docs/architecture.md)
+
+| Decision | Why |
+|----------|-----|
+| **ECS over Fargate** | 86% compute cost reduction ($142 → $20/month) with managed instances |
+| **Cloudflare Tunnel over ALB/WAF** | Eliminates $62/month in networking costs, zero inbound ports |
+| **Inline RAG over OpenSearch** | Sufficient for policy ingestion, $190/month savings, sub‑5ms search latency |
+| **Never act autonomously** | The agent cannot refund, credit, or schedule pickups. Those tools were deliberately removed from the MCP server. |
+| **Deterministic routing** | A hard‑coded `INTENT → TEAM` table guarantees 100% predictable ticket assignment. |
+| **DSPy guardrail first** | Every message is classified **before** any context is fetched or any tool is called. |
+
+---
+
+## Cost Breakdown . [Docs](docs/cost_optimizations.md)
+
+| Category | Baseline | Optimized | Saving |
+|----------|----------|-----------|--------|
+| Compute | $142 (Fargate) | $20 (2 × t4g.small, ECS managed) | $122 |
+| Networking | $62 (ALB + NAT + WAF) | $0 (Cloudflare Tunnel) | $62 |
+| Database | — | $0 (RDS PostgreSQL, free tier) | — |
+| Vector Search | $190 (OpenSearch) | ~$0.03 (S3 + NumPy) | $190 |
+| Observability | $15–20 (X‑Ray) | ~$3 (CloudWatch) | $12–17 |
+| **Total** | **~$414/month** | **~$23/month** | **91%** |
+
+---
+
 
 # Get started
 
@@ -94,7 +117,7 @@ Edge (Cloudflare) → Application (FastAPI) → Container (Docker) → Network (
 
 ## Clone the repo and build the devcontainer(Reproducible). This will take 10-20 minutes. 
 ```sh 
-cd $HOME && rm -rf E2E-RAG-System && git clone https://github.com/Athithya-Sakthivel/AgentOps.git && cd AgentOps && code .
+cd $HOME && rm -rf TicketWeave && git clone https://github.com/Athithya-Sakthivel/TicketWeave.git && cd TicketWeave && code .
 ```
 > ctrl + shift + P -> paste `Dev containers: Rebuild Container Without Cache` and enter
 
@@ -116,7 +139,7 @@ gh auth login
 ### Create a private repo in your gh account
 
 ```sh
-export REPO_NAME="AgentOps" # or any name
+export REPO_NAME="TicketWeave-1" # or any name
 git remote remove origin 2>/dev/null || true
 gh repo create "$REPO_NAME" --private >/dev/null 2>&1
 REMOTE_URL="https://github.com/$(gh api user | jq -r .login)/$REPO_NAME.git"
@@ -150,7 +173,7 @@ Provisions a VPC (public subnets for ECS, private subnets for RDS), a 2‑node E
 
 ```sh
 export TF_VAR_region="ap-south-1"
-export TF_VAR_github_repository="Athithya-Sakthivel/AgentOps"   # replace with your GitHub repo
+export TF_VAR_github_repository="Athithya-Sakthivel/TicketWeave"   # replace with your GitHub repo
 bash src/infra/aws/run.sh --create --env staging
 ```
 
@@ -223,6 +246,11 @@ aws ecs update-service --cluster agentops-staging-cluster --service agentops-sta
 ![alt text](src/offline/images/force_reload.png)
 
 ---
+
+## [▶ Agent Demo](https://www.youtube.com/watch?v=GD__e4UwAlA)
+
+---
+
 
 ### Phase 4: Teardown
 
